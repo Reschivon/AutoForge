@@ -1,17 +1,20 @@
-def foo(x, y, z):
+def foo():
     
-    a = x + y + z * 2
     
-    sum = 0
     
-    for i in range(a):
-        x = y + z
-        x *= 1
-        
-        sum+=x
-        
-        
-    return sum
-
-def bar():
-    print('This is bar!')
+    
+    
+    
+    
+    
+      
+    x = 4
+    y = 7
+    while x <= c:
+        if y < 3:
+            a = x + 1
+            y = x + 2
+        else:
+            y = x + 1
+            x = x + 1  
+        x = x + 1

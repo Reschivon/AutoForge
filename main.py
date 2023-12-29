@@ -38,8 +38,9 @@ if __name__ == '__main__':
     
     cfg = autoplag.build_cfg(ast_tree)
     
-    autoplag.rda(cfg, ast_tree)
-        
     dot = cfg.to_image(ast_tree)
     dot.format = 'png'
     dot.render('debug/cfg')
+    
+    autoplag.rda(cfg, ast_tree)
+        

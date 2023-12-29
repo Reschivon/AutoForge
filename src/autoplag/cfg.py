@@ -121,7 +121,6 @@ def build_cfg(ast_tree):
                 entry_chunk.append(node)
                 
                 if_gather = cfg.add_node(Chunk())
-                cfg.add_edge(entry_chunk, if_gather)
                 
                 body_chunk_entry = cfg.add_node(Chunk())
                 cfg.add_edge(entry_chunk, body_chunk_entry)
@@ -133,7 +132,7 @@ def build_cfg(ast_tree):
                     bottom_chunk_entry = cfg.add_node(Chunk())
                     cfg.add_edge(entry_chunk, bottom_chunk_entry)
                     
-                    bottom_chunk_exit = treewalk(node.orelse, bottom_chunk_entry)
+                    bottom_chunk_exit = treewalk(node.orelse.body, bottom_chunk_entry)
                     
                     cfg.add_edge(bottom_chunk_exit, if_gather)
                 

@@ -63,6 +63,9 @@ class Chunk:
         stmts = map(lambda s: s.stmt, self.stmts)
         return stmts.__iter__()
     
+    def __getitem__(self, index):
+        return self.stmts[index]
+    
     def end_on_unconditional_jump(self) -> bool:
         return len(self.stmts) > 0 and \
               not isinstance_ControlFlow(self.stmts[-1])
@@ -96,11 +99,11 @@ class DirectedGraph:
     
     def parents(self, obj):
         # TODO make faster
-        parent_ids = []
-        for parent, children in self.connections:
+        parents = []
+        for parent, children in self.connections.items():
             if str(id(obj)) in children:
-                parent_ids.append(self.objects[parent]) 
-        return parent_ids
+                parents.append(self.objects[parent]) 
+        return parents
         
     def to_image(self, root: cst.Module):
         from graphviz import Digraph
@@ -124,6 +127,7 @@ class DirectedGraph:
                 
                 node_name += '\n' + root.code_for_node(node).split('\n')[0]
             else:
+                # tuple of mall statements
                 node_name = ''.join([root.code_for_node(nodelet).strip().split('\n')[0] + '\n' for nodelet in node])
                 
             # Create node 
