@@ -1,0 +1,17 @@
+
+[project]
+name = "autoplag"
+
+description = "Auto summarization of Python 3 code"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+version = "0.0.1"
+
+dependencies = [
+    "libcst",
+]
+
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
