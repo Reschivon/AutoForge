@@ -37,6 +37,8 @@ if __name__ == '__main__':
     dot.render('debug/ast')
     
     cfg = autoplag.build_cfg(ast_tree)
+    
+    autoplag.rda(cfg, ast_tree)
         
     dot = cfg.to_image(ast_tree)
     dot.format = 'png'

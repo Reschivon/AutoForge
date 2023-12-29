@@ -5,9 +5,8 @@
 Much thanks to staticfg, which served as a primer as I was puzzlling over this
 '''
 
-from typing import List, Optional
 import libcst as cst
-from autoplag import DirectedGraph
+from autoplag import DirectedGraph, Chunk, isinstance_ControlFlow, isinstance_NonWhitespace
     
 indents = 0
 def indent():
@@ -27,40 +26,14 @@ def iprint(*kwargs):
     print(indent_str, end='')
     print(*kwargs)
 
-def isinstance_NonWhitespace(node: cst.CSTNode):
-    typename = type(node).__name__
-    
-    return not ('Whitespace' in typename \
-                or 'Comma' in typename \
-                or 'EmptyLine' in typename \
-                or 'Newline' in typename)
-    
-def isinstance_ControlFlow(node: cst.CSTNode):
-    return isinstance(node, cst.If) \
-        or isinstance(node, cst.While) \
-        or isinstance(node, cst.For)
- 
-class Chunk:
-    def __init__(self) -> None:
-        self.thingies: List[cst.BaseSmallStatement] = []
-        self.ending: Optional[cst.CSTNode] = None
-        
-    def append(self, thing: cst.BaseSmallStatement):
-        self.thingies.append(thing)
-    
-    def __iter__(self):
-        return self.thingies.__iter__()
-    
-    def end_on_unconditional_jump(self) -> bool:
-        return len(self.thingies) > 0 and \
-              not isinstance_ControlFlow(self.thingies[-1])
-    
 def build_cfg(ast_tree):
     cfg = DirectedGraph()    
     
+    print('\nTree walk uwu')
+    
     def first_line(node):
         try:
-            return ast_tree.code_for_node(node).split('\n')[0]
+            return ast_tree.code_for_node(node).strip().split('\n')[0]
         except:
             return 'No code for type ' + type(node).__name__
     
@@ -170,17 +143,9 @@ def build_cfg(ast_tree):
                 raise Exception()
             
         elif isinstance(node, cst.FunctionDef):
-            # Not a statement, must be a function def
-            iprint('treewalk definition:', type(node).__name__, first_line(node))
+            iprint('treewalk FunctionDef:', first_line(node))
             
-            target = node.body
-            if isinstance(node.body, tuple) and len(node.body) == 1:
-                target = node.body[0]
-            
-            # try:
-            ret_val = treewalk(target, entry_chunk)
-            # except:
-            #     print("Treewalk failed on ", type(target))
+            ret_val = treewalk(node.body, entry_chunk)
         
         else:
             raise Exception(type(node).__name__ + ' must be a Function node or a node found within a function')
@@ -190,8 +155,7 @@ def build_cfg(ast_tree):
             
     assert(isinstance(ast_tree, cst.Module))
     for function in ast_tree.children:
-        entry_chunk = Chunk()
-        cfg.add_node(entry_chunk)
+        entry_chunk = cfg.add_node(Chunk())
         exit_chunk = treewalk(function, entry_chunk)
     
     return cfg
