@@ -10,4 +10,13 @@ def foo(x, y, z):
         
         sum+=x
         
+    # if y > 1:
+    #     print('here')
+        
+    # while x > -1:
+    #     x -= 1
+        
     return sum
+
+def bar():
+    print('This is bar!')
