@@ -17,6 +17,7 @@ def shuffle(cfg: DirectedGraph, ast: cst.Module):
     # Everything stays in its original scope during mixing    
     # There are ways to move them but it's complicated to compute, and the prerequisites
     # make such moves unnlikely
+    
             
     # If given two statements (x, y) such that x has a dep on y and y executes before x,
     # then invert the dependency so that y has a dep on x
