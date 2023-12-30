@@ -23,6 +23,12 @@ def get_all_names(node: cst.CSTNode):
     Return all references to a name.
     Beware: includes assignments on top of usages
     '''
+    
+    # Special case: the visitor only works for children of the given node,
+    # so if the node itself is a cst.Name it won't work
+    if isinstance(node, cst.Name):
+        return node.value
+    
     class UsesVisitor(cst.CSTVisitor):
         def __init__(self) -> None:
             self.names: List[cst.Name] = []
@@ -87,7 +93,7 @@ def run_rda(cfg: DirectedGraph, ast: cst.Module):
             if empty(defs_intersected): continue
             
             names_intersected, stmts_intersected = zip(*defs_intersected)
-            stmts_intersected = set(stmts_intersected)
+            stmts_intersected: List[AssignType] = set(stmts_intersected)
             
             # Do not put yourself in the kill set
             stmts_intersected.remove(stmt_data.stmt)
@@ -97,7 +103,7 @@ def run_rda(cfg: DirectedGraph, ast: cst.Module):
     # Add dummy statements to empty chunks so the propagration works correctly
     for chunk in cfg:
         if empty(chunk.stmts):
-            chunk.append(cst.Comment('# Empty BB placeholder')) 
+            chunk.append(cst.Comment('# Empty BB')) 
             
     # Do IN/OUT
     while True:
@@ -140,40 +146,45 @@ def run_rda(cfg: DirectedGraph, ast: cst.Module):
                 # Special case for assign types: do not call get_all_names on the whole
                 # node because that'll include the assign-targets, which are NOT usages
                 # instead we get all names in the expression part
-                uses = get_all_names(stmt_data.stmt.value)
-            
+                stmt_data.uses = get_all_names(stmt_data.stmt.value)
+                            
             elif isinstance_ControlFlow(stmt_data.stmt):
                 # Special case for control flow
                 # In our cfg, when we encounter a controlflow node at the end of a BB,
                 # we include the whole control flow block, including its body. However,
                 # for control flow we only case about usages in the expression, hence the special case
-                uses = get_all_names(get_expression_ControlFlow(stmt_data.stmt))
+                stmt_data.uses = get_all_names(get_expression_ControlFlow(stmt_data.stmt))
                 
             elif isinstance(stmt_data.stmt, cst.CSTNode):
-                uses = get_all_names(stmt_data.stmt)
+                stmt_data.uses = get_all_names(stmt_data.stmt)
                 
             else:
                 raise Exception() 
                 
-            
-            # Find all members of IN set that assign to our uses
-            dependencies: List[AssignType] = []
+            # Find all members of IN set that intersect our use set
+            # Because IN is a set of stmts which use is a set of variable names,
+            # we have to first map each IN set item to its defined variable names
             for in_set_stmt in stmt_data.ins:
                 variables_defined = get_assignment_targets(in_set_stmt)
-                defines_a_var_we_use = intersects(uses, variables_defined)
+                defines_a_var_in_use_set = intersects(stmt_data.uses, variables_defined)
                 
-                if defines_a_var_we_use: stmt_data.deps.add(in_set_stmt)
+                if defines_a_var_in_use_set: stmt_data.deps.add(in_set_stmt)
+                
+            # Find all members of IN set that intersect our kill set
+            stmt_data.deps.update(stmt_data.kills.intersection(stmt_data.ins))
                     
     # Print gen/kill
     print()
     for chunk in cfg:
         for stmt_data in chunk.stmts: 
             
-            print(first_line(stmt_data.stmt, ast), ':', 
+            print(first_line(stmt_data.stmt, ast), 
                     # 'gens', [first_line(gen, ast) for gen in stmt_data.gens], \
                     #   '\tkills', [first_line(s, ast) for s in stmt_data.kills], \
-                  '\tins', [first_line(s, ast) for s in stmt_data.ins], \
-                  '\n\t\touts', [first_line(s, ast) for s in stmt_data.outs] )
+                  '\tins', stringify(stmt_data.ins, ast), \
+                  '\n\touts', stringify(stmt_data.outs, ast), \
+                  '\n\tuses', stringify(stmt_data.uses, ast), \
+                  '\n\tkills', stringify(stmt_data.kills, ast))
             
             print()
         

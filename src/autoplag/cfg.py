@@ -5,6 +5,7 @@
 Much thanks to staticfg, which served as a primer as I was puzzlling over this
 '''
 
+from typing import List
 import libcst as cst
 from autoplag import DirectedGraph, Chunk, first_line, isinstance_ControlFlow, isinstance_NonWhitespace
     
@@ -26,9 +27,11 @@ def iprint(*kwargs):
     print(indent_str, end='')
     print(*kwargs)
 
-def build_cfg(ast_tree):
+def build_cfgs(ast_tree):
     '''
-    Builds CFG, inserting nodes into a graph structure, where graph verticies are BBs (Chunks)
+    Builds CFGs, inserting nodes into a graph structure, where graph verticies are BBs (Chunks).
+    Returns a list of CFGs, one per function. Each contains a .func member referencing the entry
+    FunctionDef node
     
     Note: as python is pass-by-ref, nodes are simply references to the ones existing in the CST tree.
     We do not modify the CST nodes at all
@@ -37,18 +40,17 @@ def build_cfg(ast_tree):
     twice, indirectly within the control flow node at the end of the Chunk and directly in the sucessor Chunks.
     '''
     
-    cfg = DirectedGraph()    
     
     print('\nTree walk uwu')
     
-    # Creates new chunk, adds to cfg, and sets order 
-    def new_chunk():
-        new_chunk = Chunk()
-        new_chunk.order = len(cfg.objects)
-        cfg.add_chunk(new_chunk)
-        return new_chunk
-    
-    def treewalk(node, entry_chunk: Chunk):
+    def treewalk(node: cst.FunctionDef, entry_chunk: Chunk, cfg: DirectedGraph):        
+        # Creates new chunk, adds to cfg, and sets order 
+        def new_chunk():
+            new_chunk = Chunk()
+            new_chunk.order = len(cfg.objects)
+            cfg.add_chunk(new_chunk)
+            return new_chunk
+        
         indent()
         
         ret_val = None
@@ -66,7 +68,7 @@ def build_cfg(ast_tree):
                 iprint('|__')
                 
                 # Reassign entry_chunk continuously
-                entry_chunk = treewalk(child, entry_chunk)
+                entry_chunk = treewalk(child, entry_chunk, cfg)
                     
             ret_val = entry_chunk
         
@@ -78,7 +80,7 @@ def build_cfg(ast_tree):
                 iprint('|__')
                 
                 # Reassign entry_chunk continuously
-                entry_chunk = treewalk(child, entry_chunk)
+                entry_chunk = treewalk(child, entry_chunk, cfg)
                     
             ret_val = entry_chunk
             # entry_chunk.body.append(node)
@@ -95,7 +97,7 @@ def build_cfg(ast_tree):
                 cfg.add_edge(entry_chunk, for_base)
                 
                 loop_chunk_entry = new_chunk()
-                loop_chunk_exit = treewalk(node.body, loop_chunk_entry)
+                loop_chunk_exit = treewalk(node.body, loop_chunk_entry, cfg)
                 
                 cfg.add_edge(for_base, loop_chunk_entry)
                 cfg.add_edge(loop_chunk_exit, for_base)
@@ -109,7 +111,7 @@ def build_cfg(ast_tree):
                 if node.orelse:
                     cfg.add_edge(while_base, orelse_chunk_entry)
                     
-                    orelse_chunk_exit = treewalk(node.orelse.body, orelse_chunk_entry)
+                    orelse_chunk_exit = treewalk(node.orelse.body, orelse_chunk_entry, cfg)
                     
                     cfg.add_edge(orelse_chunk_exit, for_gather)
                 
@@ -126,7 +128,7 @@ def build_cfg(ast_tree):
                 cfg.add_edge(entry_chunk, while_base)
                 
                 loop_chunk_entry = new_chunk()
-                loop_chunk_exit = treewalk(node.body, loop_chunk_entry)
+                loop_chunk_exit = treewalk(node.body, loop_chunk_entry, cfg)
                 
                 cfg.add_edge(while_base, loop_chunk_entry)
                 cfg.add_edge(loop_chunk_exit, while_base)
@@ -141,7 +143,7 @@ def build_cfg(ast_tree):
                 if node.orelse:
                     cfg.add_edge(while_base, orelse_chunk_entry)
                     
-                    orelse_chunk_exit = treewalk(node.orelse.body, orelse_chunk_entry)
+                    orelse_chunk_exit = treewalk(node.orelse.body, orelse_chunk_entry, cfg)
                     
                     cfg.add_edge(orelse_chunk_exit, while_gather)
                     
@@ -152,8 +154,6 @@ def build_cfg(ast_tree):
                 
                 # Make new blocks for each
                 entry_chunk.append(node)
-                
-                
                 
                 body_chunk_entry = new_chunk()
                 cfg.add_edge(entry_chunk, body_chunk_entry)
@@ -170,7 +170,7 @@ def build_cfg(ast_tree):
                 if node.orelse:
                     cfg.add_edge(entry_chunk, orelse_chunk_entry)
                     
-                    bottom_chunk_exit = treewalk(node.orelse.body, orelse_chunk_entry)
+                    bottom_chunk_exit = treewalk(node.orelse.body, orelse_chunk_entry, cfg)
                     
                     cfg.add_edge(bottom_chunk_exit, if_gather)
                 
@@ -182,7 +182,7 @@ def build_cfg(ast_tree):
         elif isinstance(node, cst.FunctionDef):
             iprint('treewalk FunctionDef:', first_line(node, ast_tree))
             
-            ret_val = treewalk(node.body, entry_chunk)
+            ret_val = treewalk(node.body, entry_chunk, cfg)
         
         else:
             raise Exception(type(node).__name__ + ' must be a Function node or a node found within a function')
@@ -191,8 +191,21 @@ def build_cfg(ast_tree):
         return ret_val
             
     assert(isinstance(ast_tree, cst.Module))
-    for function in ast_tree.children:
-        entry_chunk = new_chunk()
-        exit_chunk = treewalk(function, entry_chunk)
     
-    return cfg
+    cfgs: List[DirectedGraph] = []
+    
+    for function in ast_tree.children:
+        assert(isinstance(function, cst.FunctionDef))
+
+        cfg = DirectedGraph()
+        entry_chunk = Chunk()
+        entry_chunk.order = len(cfg.objects)
+        cfg.add_chunk(entry_chunk)
+        
+        exit_chunk = treewalk(function, entry_chunk, cfg)
+        
+        cfg.func = function
+        
+        cfgs.append(cfg)
+    
+    return cfgs

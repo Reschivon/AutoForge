@@ -65,7 +65,9 @@ def first_line(node, ast):
                   a blank cst.CSTNode properly. In this case this function will just print the string
     Error: If for some reason code is not available on the libCST side, this will print a generic error
     '''
-    
+    if isinstance(node, str):
+        return node
+        
     try:
         return ast.code_for_node(node).strip().split('\n')[0]
     except:
@@ -76,16 +78,22 @@ class StmtData:
                  stmt: cst.BaseSmallStatement):
         
         self.stmt = stmt
-        self.gens: Set[AssignType] = set()
-        self.kills: Set[Tuple[str, AssignType]] = set()
-        self.ins: Set[AssignType] = set() 
-        self.outs: Set[AssignType] = set()
-        self.deps: Set[AssignType] = set()
         
-        # Chunk index, intra-chunk order
+        # Chunk index, intra-chunk order, generated during CFG
         # Such that, if statement x executes after y, then order x > y
         # Note the reverse assertion does NOT hold
         self.order: Tuple[int, int] = None
+        
+        # During RDA
+        self.gens: Set[AssignType] = set()
+        self.kills: Set[AssignType] = set()
+        self.ins: Set[AssignType] = set() 
+        self.outs: Set[AssignType] = set()
+        self.uses: Set[str] = set()
+        
+        self.deps: Set[AssignType] = set()
+        
+        # During shuffling
         
 class Chunk:
     ''''
@@ -175,13 +183,14 @@ class DirectedGraph:
         '''
         return self.objects.values().__iter__()
         
-    def to_image(self, root: cst.Module):
+    def to_image(self, root: cst.Module, dot=None):
         '''
         Makes a graviz representation of the graph, skipping whitespace nodes for brevity
         '''
         from graphviz import Digraph
         
-        dot = Digraph()
+        if dot is None:
+            dot = Digraph()
         
         # Keep track of which nodes are being included, so when we add edges later only
         # these are connected

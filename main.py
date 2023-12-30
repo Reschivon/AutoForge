@@ -1,5 +1,6 @@
 
 import sys
+from graphviz import Digraph
 import libcst as cst
 
 import autoplag
@@ -35,11 +36,17 @@ if __name__ == '__main__':
     dot.format = 'png'
     dot.render('debug/ast')
     
-    cfg = autoplag.build_cfg(ast_tree)
+    cfgs = autoplag.build_cfgs(ast_tree)
     
-    dot = cfg.to_image(ast_tree)
+    dot = Digraph()
+    for cfg in cfgs:
+        cfg.to_image(ast_tree, dot)
     dot.format = 'png'
     dot.render('debug/cfg')
     
-    autoplag.run_rda(cfg, ast_tree)
+    for cfg in cfgs:
+        autoplag.run_rda(cfg, ast_tree)
+    
+    for cfg in cfgs:
+        autoplag.shuffle(cfg, ast_tree)
         

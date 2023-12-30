@@ -21,10 +21,9 @@ For diagnostic fans, have `graphviz` installed
 
 Goal is to modify at least one line in every 3-line chunk to break MOSS fingerprinting. (The k-value is not exactly three lines but this is a good enough approximation for now)
 
-1. Statement reordering. After building Use-Def chains (requiring CFG and RDA), we can generate a set of predecessor constraints for each statement that will define what reorderings preserve semantics. For example, for a statement x, IN(X) ∩ USE(X) are the set of instructions that must come before x. 
+1. Statement reordering. After building Use-Def chains (requiring CFG and RDA), we can generate a set of predecessor constraints for each statement that will define what reorderings preserve semantics. For example, for a statement x, USE-DEF(x) U [KILL(x) ∩ IN(x)] are the set of instructions that must come before x. (Where USE-DEF(x) is the set of dominating definitions corresponding to our USE set) (We have to union the KILL set with IN set to only get valid dominating definitions at the statement)
 
-    As a rule of thumb, x should not move outside its scope. It can if it does not clash with with other definitions of x at the control merge/split point, but generally checking this is rather tedious and
-    such these opportunities are rare in practice.
+    As a rule of thumb, x should not move outside its scope. It can if it does not clash with with other definitions of x at the control merge/split point, but generally checking this is rather tedious and such opportunities are rare in practice.
     
     There are cases where we can move x to the scope preheader, if it has no dependencies on anything within the scope. (Note: for this, check dependencies before and after)
     
