@@ -66,25 +66,23 @@ def shuffle(cfg: DirectedGraph, ast: cst.Module):
         insertable: List[cst.CSTNode] = list()
         
         def insert_stmts_with_no_deps():
-            for stmt in chunk.stmts:
+            for stmt in chunk.stmts.copy():
                 if len(stmt.deps) == 0:
                     insertable.append(stmt)
                     chunk.stmts.remove(stmt)
                     
         # No-deps statements are always insertable
-        print('initial stmts', stringify(chunk.stmts, ast), [id(s) for s in chunk.stmts])
+        print('initial stmts', stringify(chunk.stmts, ast))
         print('initial deps', [stringify(stmt.deps, ast) for stmt in chunk.stmts])
         insert_stmts_with_no_deps()
-        print('initial insertable', stringify(insertable, ast))
         
-        while len(insertable) > 0:
-            print('all insertables', stringify(insertable, ast))
-            
+        while len(insertable) > 0:            
             # Insert random allowable
             i_to_remove = random.randint(0, len(insertable) - 1)
             new_stmts.append(insertable[i_to_remove])
             del insertable[i_to_remove]
             
+            print('\tinsert choices', stringify(insertable, ast))
             print('inserted', first_line(new_stmts[-1], ast), id(new_stmts[-1]))
             
             # Recompute deps (for all chunks after)
@@ -92,11 +90,9 @@ def shuffle(cfg: DirectedGraph, ast: cst.Module):
                 if recmp_chunk.order < chunk.order: continue
                 
                 for stmt in recmp_chunk.stmts:
-                    print('\trecmp considering stmt', stmt.order, stringify(stmt.deps, ast), [id(s) for s in stmt.deps])
                     # Remove dependency if it was just inserted
                     if new_stmts[-1].stmt in stmt.deps:
                         stmt.deps.remove(new_stmts[-1].stmt)
-                        print('\t\t removed', first_line(new_stmts[-1], ast))
             
             # Recompute insertable
             insert_stmts_with_no_deps()

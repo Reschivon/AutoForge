@@ -2,10 +2,8 @@ def foo():
     x = 4
     while x <= c:
         y = x
-        
         q = x
         r = x
-        s = x
           
         
     if 5:
