@@ -83,7 +83,7 @@ def shuffle(cfg: DirectedGraph, ast: cst.Module):
             del insertable[i_to_remove]
             
             print('\tinsert choices', stringify(insertable, ast))
-            print('inserted', first_line(new_stmts[-1], ast), id(new_stmts[-1]))
+            print('inserted', first_line(new_stmts[-1], ast))
             
             # Recompute deps (for all chunks after)
             for recmp_chunk in chunks:

@@ -176,7 +176,9 @@ class DirectedGraph:
         self.connections[str(id(parent))].append(str(id(child)))
     
     def children(self, obj):
-        return map(self.objects.get, self.connections(str(id(obj))))
+        return list(map(self.objects.get, 
+                        self.connections[str(id(obj))]
+                        ))
     
     def parents(self, obj):
         # TODO make faster

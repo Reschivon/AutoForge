@@ -4,7 +4,8 @@ def foo():
         y = x
         q = x
         r = x
-          
+    finally:
+        print('finally')      
         
     if 5:
         a = b = c      

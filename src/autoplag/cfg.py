@@ -15,17 +15,22 @@ def indent():
     indents += 1
     
     if indents > 13:
-        raise Exception()
+        raise Exception('Indented more than a sane amount! (Is there a bug?)')
 
 def undent():
     global indents
     indents -= 1
     
 def iprint(*kwargs):
+    to_print = ' '.join([str(k) for k in kwargs])
+    
     global indents
     indent_str = '    ' * indents
-    print(indent_str, end='')
-    print(*kwargs)
+    
+    indented_lines = [indent_str + line for line in to_print.split('\n')]
+    to_print = '\n'.join(indented_lines)
+
+    print(to_print)
 
 def build_cfgs(ast_tree):
     '''
@@ -176,7 +181,9 @@ def build_cfgs(ast_tree):
                     bottom_chunk_exit = treewalk(node.orelse.body, orelse_chunk_entry, cfg)
                     
                     cfg.add_edge(bottom_chunk_exit, if_gather)
-                
+                else:
+                    cfg.add_edge(entry_chunk, if_gather)
+                    
                 ret_val = if_gather
                 
             else:
@@ -208,7 +215,100 @@ def build_cfgs(ast_tree):
         exit_chunk = treewalk(function, entry_chunk, cfg)
         
         cfg.func = function
+        cfg.entry = entry_chunk
         
         cfgs.append(cfg)
     
     return cfgs
+
+def find_if_join_point():
+    '''
+    Cuz I'm not writing a dominiator algorithm
+    We actually have enough info to get away with not using dominators for
+    while and if
+    '''
+
+def add_cfg_to_ast(cfg: DirectedGraph, ast):    
+    visited: set[Chunk] = set()
+    
+    def build_ast(curr_chunk: Chunk):
+        indent()
+        
+        
+        body = []
+        
+        while True:
+            if curr_chunk in visited:
+                break
+            
+            visited.add(curr_chunk)
+            
+            iprint('\nbuild ast for', ''.join([ast.code_for_node(nodelet).strip().split('\n')[0] for nodelet in curr_chunk]))
+            
+            children = cfg.children(curr_chunk)
+            
+            if len(children) == 0:
+                break
+            
+            ends_in_ctrl = isinstance_ControlFlow(curr_chunk.stmts[-1].stmt)
+            iprint('ends_in_ctrl', ends_in_ctrl)
+            
+            if ends_in_ctrl:
+                for stmt in curr_chunk.stmts[:-1]:
+                    body.append(cst.SimpleStatementLine(body=[stmt.stmt]))
+   
+                end_stmt = curr_chunk.stmts[-1].stmt
+                
+                assert len(children) >= 2
+                
+                if isinstance(end_stmt, cst.While):
+                    iprint('(ast for while)')
+                    
+                    body_block = build_ast(children[0])
+                    orelse_block = build_ast(children[1]) if len(children) == 2 else None
+                    body.append(end_stmt.with_changes(body=body_block, orelse=orelse_block))
+                    curr_chunk = children[-1]
+                    
+                elif isinstance(end_stmt, cst.For):
+                    children = cfg.children(curr_chunk)
+                    body_block = build_ast(children[0])
+                    orelse_block = build_ast(children[1]) if len(children) == 2 else None
+                    body.append(end_stmt.with_changes(body=body_block, orelse=orelse_block))
+                    curr_chunk = children[-1]
+                    
+                elif isinstance(end_stmt, cst.If):
+                    children = cfg.children(curr_chunk)
+                    body_block = build_ast(children[0])
+                    orelse_block = build_ast(children[1]) if len(children) == 2 else None
+                    body.append(end_stmt.with_changes(body=body_block, orelse=orelse_block))
+                    curr_chunk = children[-1]
+                    
+            else:
+                # iprint('build ast for uncond jump sequence')
+                
+                # does not end in ctrl
+                for stmt in curr_chunk.stmts:
+                    body.append(cst.SimpleStatementLine(body=[stmt.stmt]))
+   
+                assert len(children) == 1
+                
+                if cfg.parents(children[0]) == curr_chunk:
+                    curr_chunk = children[0]
+                else:
+                    # looks like we're coming into a merge point
+              
+        # end while True
+                
+        undent()
+        
+        iprint('Done building for this linear control path')  
+                        
+        block = cst.IndentedBlock(body=body)
+        return block
+        
+    function: cst.FunctionDef = cfg.func
+    entry_chunk = cfg.entry
+    body_block = build_ast(entry_chunk)    
+    function.with_changes(body=body_block)
+    
+    return function
