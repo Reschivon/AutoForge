@@ -35,10 +35,10 @@ def iprint(*kwargs):
 
 def build_cfgs(ast_tree):
     '''
-    Builds CFGs, inserting nodes into a graph structure, where graph verticies are BBs (Chunks).
-    Returns a list of CFGs, one per function. Each contains a .func member referencing the entry
-    FunctionDef node
-    
+    Returns a list of CFGs, one per function. Creates a graph structure, where verticies are 
+    BBs (Chunks). Each CFG contains a .func member referencing the corresponding function node,
+    and a .entry member for first Chunk
+        
     Note: as python is pass-by-ref, nodes are simply references to the ones existing in the CST tree.
     We do not modify the CST nodes at all
      

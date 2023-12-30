@@ -52,7 +52,6 @@ if __name__ == '__main__':
     for cfg in cfgs:
         orig_func = cfg.func
         new_func = autoplag.cfg_to_ast(cfg, ast_tree)  
-        
         ast_tree = ast_tree.visit(Psych(orig_func, new_func))
         
     print('Generated\n', ast_tree.code)
