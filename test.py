@@ -3,7 +3,10 @@ def foo():
     while x <= c:
         y = x
         
-        x = 5  
+        q = x
+        r = x
+        s = x
+          
         
     if 5:
         a = b = c      
