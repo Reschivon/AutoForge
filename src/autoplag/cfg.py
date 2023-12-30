@@ -8,6 +8,7 @@ Much thanks to staticfg, which served as a primer as I was puzzlling over this
 from typing import List
 import libcst as cst
 from autoplag import DirectedGraph, Chunk, first_line, isinstance_ControlFlow, isinstance_NonWhitespace
+from autoplag.rda import stringify
     
 indents = 0
 def indent():
@@ -96,6 +97,8 @@ def build_cfgs(ast_tree):
             # because later shuffle.py uses the order to reconstruct the ast
             # The DirectedGraph object will preserve edge order as insertion order
             
+            # Also, the `orelse` clauses in For and While connect back to the base
+            # chunk to ease the process of converting back to ast
             if isinstance(node, cst.For):
                 iprint('treewalk For', first_line(node, ast_tree))
                 
@@ -113,15 +116,12 @@ def build_cfgs(ast_tree):
                 # Do this first so the chunk order is before for_gather
                 if node.orelse:
                     orelse_chunk_entry = new_chunk()
-                    
-                for_gather = new_chunk()
-                
-                if node.orelse:
-                    cfg.add_edge(while_base, orelse_chunk_entry)
+                    cfg.add_edge(for_base, orelse_chunk_entry)
                     
                     orelse_chunk_exit = treewalk(node.orelse.body, orelse_chunk_entry, cfg)
+                    cfg.add_edge(orelse_chunk_exit, for_base)
                     
-                    cfg.add_edge(orelse_chunk_exit, for_gather)
+                for_gather = new_chunk()                    
                 
                 cfg.add_edge(for_base, for_gather)
                 
@@ -144,16 +144,13 @@ def build_cfgs(ast_tree):
                 # Do this before while_gather so the chunk order is right
                 if node.orelse:
                     orelse_chunk_entry = new_chunk()
-                
-                while_gather = new_chunk()
-                cfg.add_edge(while_base, while_gather)
-                
-                if node.orelse:
                     cfg.add_edge(while_base, orelse_chunk_entry)
                     
                     orelse_chunk_exit = treewalk(node.orelse.body, orelse_chunk_entry, cfg)
-                    
-                    cfg.add_edge(orelse_chunk_exit, while_gather)
+                    cfg.add_edge(orelse_chunk_exit, while_base)
+                
+                while_gather = new_chunk()
+                cfg.add_edge(while_base, while_gather)                    
                     
                 ret_val = while_gather
             
@@ -221,20 +218,54 @@ def build_cfgs(ast_tree):
     
     return cfgs
 
-def find_if_join_point():
+def find_if_join_point(ordered_chunks: List[Chunk], cfg: DirectedGraph, start_chunk: Chunk):
     '''
     Cuz I'm not writing a dominiator algorithm
     We actually have enough info to get away with not using dominators for
-    while and if
+    While and For. However for If we do need to compute the join point
     '''
+    
+    seen: set[Chunk] = set()
+    seen.add(start_chunk)
+    start_chunk.nesting = 0
+    
+    i = start_chunk.order
+    while True:
+        i += 1
+        curr_chunk = ordered_chunks[i]
+        assert not hasattr(curr_chunk, 'nesting')
+        parents = cfg.parents(curr_chunk)
+        
+        # Compute nesting
+        if len(parents) == 2:
+            # Join point
+            assert parents[0].nesting == parents[1].nesting
+            curr_chunk.nesting = parents[0].nesting - 1
+        else:
+            assert len(parents) == 1
+            curr_chunk.nesting = parents[0].nesting + 1
+            
+        if curr_chunk.nesting == 0: 
+            # print('join point of', start_chunk.order, 'is', curr_chunk.order)
+            # Clean the attributes we made
+            for i in range(start_chunk.order, i + 1): 
+                delattr(ordered_chunks[i], 'nesting')
+            return curr_chunk
 
-def add_cfg_to_ast(cfg: DirectedGraph, ast):    
+def add_cfg_to_ast(cfg: DirectedGraph, ast):  
+    
+    # Build ordered chunks
+    ordered_chunks: List[Chunk] = [None] * len(cfg.objects) 
+    for chunk in cfg:
+        ordered_chunks[chunk.order] = chunk
+    for chunk in ordered_chunks:
+        assert chunk is not None
+      
     visited: set[Chunk] = set()
     
     def build_ast(curr_chunk: Chunk):
         indent()
-        
-        
+         
         body = []
         
         while True:
@@ -278,9 +309,16 @@ def add_cfg_to_ast(cfg: DirectedGraph, ast):
                     
                 elif isinstance(end_stmt, cst.If):
                     children = cfg.children(curr_chunk)
+                    
+                    join_chunk = find_if_join_point(ordered_chunks, cfg, curr_chunk)
+                    visited.add(join_chunk)
+                    
                     body_block = build_ast(children[0])
                     orelse_block = build_ast(children[1]) if len(children) == 2 else None
+                    
                     body.append(end_stmt.with_changes(body=body_block, orelse=orelse_block))
+                    
+                    visited.remove(join_chunk)
                     curr_chunk = children[-1]
                     
             else:
@@ -292,10 +330,9 @@ def add_cfg_to_ast(cfg: DirectedGraph, ast):
    
                 assert len(children) == 1
                 
-                if cfg.parents(children[0]) == curr_chunk:
-                    curr_chunk = children[0]
-                else:
-                    # looks like we're coming into a merge point
+                # if cfg.parents(children[0]) == curr_chunk:
+                curr_chunk = children[0]
+        
               
         # end while True
                 

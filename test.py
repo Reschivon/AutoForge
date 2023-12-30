@@ -4,7 +4,7 @@ def foo():
         y = x
         q = x
         r = x
-    finally:
+    else:
         print('finally')      
         
     if 5:
@@ -14,5 +14,7 @@ def foo():
     
     for i in range(100):
         print('loop', i)
+    else:
+        print('finality')
         
     # Comment hehe

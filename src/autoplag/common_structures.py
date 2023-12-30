@@ -154,15 +154,17 @@ class DirectedGraph:
     Can get parents and children of an inserted node
     '''
     def __init__(self):
-        self.connections: Dict[int, List[int]] = {}
         self.objects: Dict[int, Chunk] = {}
+        self.child_ids: Dict[int, List[int]] = {}
+        self.parent_ids: Dict[int, List[int]] = {}
     
     def add_chunk(self, obj):
         # if obj in self.objects:
         #     raise RuntimeError('Cannot add the same object twice')
                 
         self.objects[str(id(obj))] = obj
-        self.connections[str(id(obj))] = list()
+        self.child_ids[str(id(obj))] = list()
+        self.parent_ids[str(id(obj))] = list()
         
         return obj
                 
@@ -171,22 +173,21 @@ class DirectedGraph:
         assert(id(parent) in self.objects and id(child) in self.objects,
             'Cannot link objects that don\'t exist')
         
-        assert(str(id(parent)) in self.connections)
+        assert(str(id(parent)) in self.child_ids.keys())
+        assert(str(id(child)) in self.parent_ids.keys())
         
-        self.connections[str(id(parent))].append(str(id(child)))
+        self.child_ids[str(id(parent))].append(str(id(child)))
+        self.parent_ids[str(id(child))].append(str(id(parent)))
     
     def children(self, obj):
         return list(map(self.objects.get, 
-                        self.connections[str(id(obj))]
+                        self.child_ids[str(id(obj))]
                         ))
     
     def parents(self, obj):
-        # TODO make faster
-        parents = []
-        for parent, children in self.connections.items():
-            if str(id(obj)) in children:
-                parents.append(self.objects[parent]) 
-        return parents
+        return list(map(self.objects.get, 
+                        self.parent_ids[str(id(obj))]
+                        ))
     
     def __iter__(self):
         '''
@@ -232,7 +233,7 @@ class DirectedGraph:
             included_id.add(id)
             
         # Add edges
-        for parent_id, children in self.connections.items():       
+        for parent_id, children in self.child_ids.items():       
             for child_id in children:     
                 if (parent_id in included_id and child_id in included_id):           
                     dot.edge(parent_id, child_id)
