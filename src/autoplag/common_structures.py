@@ -211,11 +211,11 @@ class DirectedGraph:
         for id, node in self.objects.items():
                         
             # Skip whitespace
-            if 'Whitespace' in type(node).__name__ \
-                or 'Comma' in type(node).__name__ \
-                or 'EmptyLine' in type(node).__name__ \
-                or 'Newline' in type(node).__name__:
-                continue
+            # if 'Whitespace' in type(node).__name__ \
+            #     or 'Comma' in type(node).__name__ \
+            #     or 'EmptyLine' in type(node).__name__ \
+            #     or 'Newline' in type(node).__name__:
+            #     continue
                         
             if isinstance(node, cst.CSTNode):
                 # For single nodes, show the node type and its first line of code

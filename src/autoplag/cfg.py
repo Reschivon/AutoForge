@@ -66,11 +66,17 @@ def build_cfgs(ast_tree):
             iprint('treewalk plain statement', first_line(node, ast_tree))
             entry_chunk.append(node)
             ret_val = entry_chunk
-                                      
+            
+        elif  not isinstance_NonWhitespace(node):
+            # Ignore
+            iprint('treewalk whitespace', first_line(node, ast_tree))
+            ret_val = entry_chunk
+    
         # Container, needs to be iterated to get to SimpleStatementLine  
         elif isinstance(node, cst.IndentedBlock):
             iprint('treewalk indented block', first_line(node, ast_tree))
-            for child in filter(isinstance_NonWhitespace, node.children):                                                        
+            # for child in filter(isinstance_NonWhitespace, node.children):                                                        
+            for child in node.children:                                                        
                 iprint('|__')
                 
                 # Reassign entry_chunk continuously
@@ -82,7 +88,8 @@ def build_cfgs(ast_tree):
         elif isinstance(node, cst.SimpleStatementLine):
             iprint('treewalk StatementLine', first_line(node, ast_tree))
             
-            for child in filter(isinstance_NonWhitespace, node.children):                                                        
+            # for child in filter(isinstance_NonWhitespace, node.children):                                                        
+            for child in node.children:   
                 iprint('|__')
                 
                 # Reassign entry_chunk continuously
@@ -285,9 +292,15 @@ def add_cfg_to_ast(cfg: DirectedGraph, ast):
             iprint('ends_in_ctrl', ends_in_ctrl)
             
             if ends_in_ctrl:
-                for stmt in curr_chunk.stmts[:-1]:
+                normal_stmt_end = len(curr_chunk.stmts) - 1
+            else:
+                normal_stmt_end = len(curr_chunk.stmts)
+                
+            for stmt in curr_chunk.stmts[:normal_stmt_end]:
+                if not isinstance(stmt.stmt, cst.Comment):
                     body.append(cst.SimpleStatementLine(body=[stmt.stmt]))
-   
+            
+            if ends_in_ctrl:
                 end_stmt = curr_chunk.stmts[-1].stmt
                 
                 assert len(children) >= 2
@@ -296,15 +309,15 @@ def add_cfg_to_ast(cfg: DirectedGraph, ast):
                     iprint('(ast for while)')
                     
                     body_block = build_ast(children[0])
-                    orelse_block = build_ast(children[1]) if len(children) == 2 else None
-                    body.append(end_stmt.with_changes(body=body_block, orelse=orelse_block))
+                    orelse_block = build_ast(children[1]) if len(children) == 3 else None
+                    body.append(end_stmt.with_changes(body=body_block, orelse=cst.Else((orelse_block))))
                     curr_chunk = children[-1]
                     
                 elif isinstance(end_stmt, cst.For):
                     children = cfg.children(curr_chunk)
                     body_block = build_ast(children[0])
-                    orelse_block = build_ast(children[1]) if len(children) == 2 else None
-                    body.append(end_stmt.with_changes(body=body_block, orelse=orelse_block))
+                    orelse_block = build_ast(children[1]) if len(children) == 3 else None
+                    body.append(end_stmt.with_changes(body=body_block, orelse=cst.Else(orelse_block)))
                     curr_chunk = children[-1]
                     
                 elif isinstance(end_stmt, cst.If):
@@ -316,21 +329,16 @@ def add_cfg_to_ast(cfg: DirectedGraph, ast):
                     body_block = build_ast(children[0])
                     orelse_block = build_ast(children[1]) if len(children) == 2 else None
                     
-                    body.append(end_stmt.with_changes(body=body_block, orelse=orelse_block))
+                    body.append(end_stmt.with_changes(body=body_block, orelse=cst.Else(orelse_block)))
                     
                     visited.remove(join_chunk)
-                    curr_chunk = children[-1]
+                    curr_chunk = join_chunk
                     
             else:
                 # iprint('build ast for uncond jump sequence')
                 
                 # does not end in ctrl
-                for stmt in curr_chunk.stmts:
-                    body.append(cst.SimpleStatementLine(body=[stmt.stmt]))
-   
                 assert len(children) == 1
-                
-                # if cfg.parents(children[0]) == curr_chunk:
                 curr_chunk = children[0]
         
               
@@ -338,7 +346,6 @@ def add_cfg_to_ast(cfg: DirectedGraph, ast):
                 
         undent()
         
-        iprint('Done building for this linear control path')  
                         
         block = cst.IndentedBlock(body=body)
         return block
@@ -346,6 +353,12 @@ def add_cfg_to_ast(cfg: DirectedGraph, ast):
     function: cst.FunctionDef = cfg.func
     entry_chunk = cfg.entry
     body_block = build_ast(entry_chunk)    
-    function.with_changes(body=body_block)
     
-    return function
+    new_function = function.with_changes(body=body_block)
+    
+    with open("ast_original.txt","w+") as f:
+        f.writelines(str(function))
+    with open("ast_generated.txt","w+") as f:
+        f.writelines(str(new_function))
+        
+    return new_function

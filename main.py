@@ -49,8 +49,7 @@ if __name__ == '__main__':
         autoplag.shuffle(cfg, ast_tree)
     
     for cfg in cfgs:
-        func = autoplag.add_cfg_to_ast(cfg, ast_tree)
-            
+        func = autoplag.add_cfg_to_ast(cfg, ast_tree)  
         print('Generated\n', ast_tree.code_for_node(func))
         
     dot = Digraph()
