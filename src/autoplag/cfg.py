@@ -69,7 +69,7 @@ def build_cfgs(ast_tree):
             
         elif  not isinstance_NonWhitespace(node):
             # Ignore
-            iprint('treewalk whitespace', first_line(node, ast_tree))
+            # iprint('treewalk whitespace', first_line(node, ast_tree))
             ret_val = entry_chunk
     
         # Container, needs to be iterated to get to SimpleStatementLine  
@@ -209,7 +209,9 @@ def build_cfgs(ast_tree):
     cfgs: List[DirectedGraph] = []
     
     for function in ast_tree.children:
-        assert(isinstance(function, cst.FunctionDef))
+        if isinstance(function, cst.EmptyLine): continue
+        
+        assert isinstance(function, cst.FunctionDef), type(function).__name__ + ' is not a function'
 
         cfg = DirectedGraph()
         entry_chunk = Chunk()
@@ -261,6 +263,8 @@ def find_if_join_point(ordered_chunks: List[Chunk], cfg: DirectedGraph, start_ch
 
 def cfg_to_ast(cfg: DirectedGraph, ast):  
     
+    print('Build AST for', cfg.func.name.value)
+    
     # Build ordered chunks
     ordered_chunks: List[Chunk] = [None] * len(cfg.objects) 
     for chunk in cfg:
@@ -281,12 +285,9 @@ def cfg_to_ast(cfg: DirectedGraph, ast):
             
             visited.add(curr_chunk)
             
-            iprint('\nbuild ast for', ''.join([ast.code_for_node(nodelet).strip().split('\n')[0] for nodelet in curr_chunk]))
+            iprint('\nbuild ast for', '\n'.join([ast.code_for_node(nodelet).strip().split('\n')[0] for nodelet in curr_chunk]))
             
             children = cfg.children(curr_chunk)
-            
-            if len(children) == 0:
-                break
             
             ends_in_ctrl = isinstance_ControlFlow(curr_chunk.stmts[-1].stmt)
             iprint('ends_in_ctrl', ends_in_ctrl)
@@ -299,6 +300,10 @@ def cfg_to_ast(cfg: DirectedGraph, ast):
             for stmt in curr_chunk.stmts[:normal_stmt_end]:
                 if not isinstance(stmt.stmt, cst.Comment):
                     body.append(cst.SimpleStatementLine(body=[stmt.stmt]))
+            
+            if len(children) == 0: 
+                assert not ends_in_ctrl
+                break
             
             if ends_in_ctrl:
                 end_stmt = curr_chunk.stmts[-1].stmt

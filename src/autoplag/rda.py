@@ -181,7 +181,7 @@ def run_rda(cfg: DirectedGraph, ast: cst.Module):
             print(first_line(stmt_data.stmt, ast), 
                     # 'gens', [first_line(gen, ast) for gen in stmt_data.gens], \
                     #   '\tkills', [first_line(s, ast) for s in stmt_data.kills], \
-                  '\tins', stringify(stmt_data.ins, ast), \
+                  '\n\tins', stringify(stmt_data.ins, ast), \
                   '\n\touts', stringify(stmt_data.outs, ast), \
                   '\n\tuses', stringify(stmt_data.uses, ast), \
                   '\n\tkills', stringify(stmt_data.kills, ast))

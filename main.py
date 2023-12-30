@@ -49,17 +49,22 @@ if __name__ == '__main__':
     for cfg in cfgs:
         autoplag.shuffle(cfg, ast_tree)
     
-    for cfg in cfgs:
-        orig_func = cfg.func
-        new_func = autoplag.cfg_to_ast(cfg, ast_tree)  
-        ast_tree = ast_tree.visit(Psych(orig_func, new_func))
-        
-    print('Generated\n', ast_tree.code)
-
     dot = Digraph()
     for cfg in cfgs:
         cfg.to_image(ast_tree, dot)
     dot.format = 'png'
     dot.render('debug/shuffled_cfg')
+    
+    
+    for cfg in cfgs:
+        orig_func = cfg.func
+        new_func = autoplag.cfg_to_ast(cfg, ast_tree)  
+        ast_tree = ast_tree.visit(Psych(orig_func, new_func))
+        
+        print('generated', orig_func.name.value, '\n', ast_tree.code_for_node(new_func))
+        # print('generated', new_func)
+    # print('Generated\n', ast_tree.code)
+
+    
     
         

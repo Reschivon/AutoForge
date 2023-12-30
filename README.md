@@ -8,6 +8,15 @@ Limited to Python3 for this proof-of-concept.
 
 Of course, by using this tool you are responsible for anything that happens to you. Cheat responsibly!
 
+
+## Todo
+- parse classes correctly, and nested functions
+- function calle object is a dependency
+- function calls should assumed to modify the arguments and calle (if applicalbe)
+- in for loop comprehensions, the iteration variable is not USE
+- function call name is not a USE
+- function parameters should be added to first IN
+
 ## Install
 You need Python > 3.9, but the code you're feeding in can be any valid Python 3 code. You also need `libcst` installed, which is on `pypi`
 
