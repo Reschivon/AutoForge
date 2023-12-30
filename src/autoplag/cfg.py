@@ -259,7 +259,7 @@ def find_if_join_point(ordered_chunks: List[Chunk], cfg: DirectedGraph, start_ch
                 delattr(ordered_chunks[i], 'nesting')
             return curr_chunk
 
-def add_cfg_to_ast(cfg: DirectedGraph, ast):  
+def cfg_to_ast(cfg: DirectedGraph, ast):  
     
     # Build ordered chunks
     ordered_chunks: List[Chunk] = [None] * len(cfg.objects) 
@@ -345,7 +345,6 @@ def add_cfg_to_ast(cfg: DirectedGraph, ast):
         # end while True
                 
         undent()
-        
                         
         block = cst.IndentedBlock(body=body)
         return block
@@ -356,9 +355,9 @@ def add_cfg_to_ast(cfg: DirectedGraph, ast):
     
     new_function = function.with_changes(body=body_block)
     
-    with open("ast_original.txt","w+") as f:
-        f.writelines(str(function))
-    with open("ast_generated.txt","w+") as f:
-        f.writelines(str(new_function))
+    # with open("ast_original.txt","w+") as f:
+    #     f.writelines(str(function))
+    # with open("ast_generated.txt","w+") as f:
+    #     f.writelines(str(new_function))
         
     return new_function

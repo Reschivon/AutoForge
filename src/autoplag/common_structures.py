@@ -239,3 +239,16 @@ class DirectedGraph:
                     dot.edge(parent_id, child_id)
                 
         return dot
+    
+class Sike(cst.CSTTransformer):
+    def __init__(self, orig_func, new_func):
+        self.orig_func: cst.FunctionDef = orig_func
+        self.new_func: cst.FunctionDef = new_func
+
+    def leave_FunctionDef(
+        self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef
+    ) -> cst.CSTNode:
+        
+        if original_node == self.orig_func:
+            return self.new_func
+        return updated_node
