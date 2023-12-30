@@ -245,9 +245,9 @@ def find_if_join_point(ordered_chunks: List[Chunk], cfg: DirectedGraph, start_ch
         
         # Compute nesting
         if len(parents) == 2:
-            # Join point
-            assert parents[0].nesting == parents[1].nesting
-            curr_chunk.nesting = parents[0].nesting - 1
+            # Join point, either between THEN and ELSE branches,
+            # or between THEN and IF header
+            curr_chunk.nesting = max(parents[0].nesting, parents[1].nesting) - 1
         else:
             assert len(parents) == 1
             curr_chunk.nesting = parents[0].nesting + 1

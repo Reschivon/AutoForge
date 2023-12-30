@@ -18,3 +18,7 @@ def foo():
         print('finality')
         
     # Comment hehe
+        
+def bar():
+    if True:
+        print("I love bars")

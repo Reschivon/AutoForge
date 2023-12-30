@@ -4,7 +4,7 @@ from graphviz import Digraph
 import libcst as cst
 
 import autoplag
-from autoplag.common_structures import Sike
+from autoplag.common_structures import Psych
 
 def tree_to_graph(ast_tree: cst.Module):
     # Convert to graph
@@ -53,10 +53,9 @@ if __name__ == '__main__':
         orig_func = cfg.func
         new_func = autoplag.cfg_to_ast(cfg, ast_tree)  
         
-        ast_tree = ast_tree.visit(Sike(orig_func, new_func))
+        ast_tree = ast_tree.visit(Psych(orig_func, new_func))
         
-    print('Generated\n', ast_tree.code_for_node(new_func))
-
+    print('Generated\n', ast_tree.code)
 
     dot = Digraph()
     for cfg in cfgs:
