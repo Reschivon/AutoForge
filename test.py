@@ -11,5 +11,6 @@ def foo():
         print('hi')
     
     for i in range(100):
-        print('loop')
+        print('loop', i)
+        
     # Comment hehe

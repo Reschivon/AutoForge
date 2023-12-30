@@ -28,7 +28,7 @@ def isinstance_NonWhitespace(node: cst.CSTNode):
 '''
 Kept having to use this Union of assignable nodes so I made a meta-type
 '''
-AssignType = Union[cst.Assign, cst.AugAssign, cst.AnnAssign]
+AssignType = Union[cst.Assign, cst.AugAssign, cst.AnnAssign, cst.CompFor]
 
 def isinstance_AssignType(node: cst.CSTNode):
     return isinstance(node, typing.get_args(AssignType))
@@ -53,6 +53,12 @@ def get_assignment_targets(stmt: AssignType) -> Set[str]:
     elif isinstance(stmt, cst.AnnAssign) and stmt.value:
         targets.add(stmt.target.value)
         
+    elif isinstance(stmt, cst.CompFor) and stmt.value:
+        targets.add(stmt.target.value)
+        
+        if stmt.inner_comp_for:
+            targets.update(get_assignment_targets(stmt.inner_comp_for))
+        
     else:
         return set()
     
@@ -67,6 +73,10 @@ def first_line(node, ast):
     '''
     if isinstance(node, str):
         return node
+    
+    # Convenient cuz I keep calling this with StmtData instad StmtData.stmt
+    if isinstance(node, StmtData):
+        node = node.stmt
         
     try:
         return ast.code_for_node(node).strip().split('\n')[0]
@@ -92,9 +102,7 @@ class StmtData:
         self.uses: Set[str] = set()
         
         self.deps: Set[AssignType] = set()
-        
-        # During shuffling
-        
+                
 class Chunk:
     ''''
     Data object for something loosely resembling BasicBlocks
@@ -138,14 +146,15 @@ class DirectedGraph:
     Directed Graph implementation for holding Chunk objects 
     
     First insert your Chunks using add_chunk()
-    Then inserted Chunks can be linked using add_edge(chunk_parent, chunk_child)
+    Then inserted Chunks can be linked using add_edge(chunk_parent, chunk_child).
+    Edges are ordered by insertion order
     
     call to_image() to generate a graphviz graph.
     
     Can get parents and children of an inserted node
     '''
     def __init__(self):
-        self.connections: Dict[int, Set[int]] = {}
+        self.connections: Dict[int, List[int]] = {}
         self.objects: Dict[int, Chunk] = {}
     
     def add_chunk(self, obj):
@@ -153,7 +162,7 @@ class DirectedGraph:
         #     raise RuntimeError('Cannot add the same object twice')
                 
         self.objects[str(id(obj))] = obj
-        self.connections[str(id(obj))] = set()
+        self.connections[str(id(obj))] = list()
         
         return obj
                 
@@ -164,7 +173,7 @@ class DirectedGraph:
         
         assert(str(id(parent)) in self.connections)
         
-        self.connections[str(id(parent))].add(str(id(child)))
+        self.connections[str(id(parent))].append(str(id(child)))
     
     def children(self, obj):
         return map(self.objects.get, self.connections(str(id(obj))))

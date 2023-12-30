@@ -28,8 +28,6 @@ if __name__ == '__main__':
         code = file.read()
         
     ast_tree = cst.parse_module(code)
-        
-    print('Regenerated:', ast_tree.code, sep='\n')
     
     graph = tree_to_graph(ast_tree)
     dot = graph.to_image(ast_tree)    
@@ -49,4 +47,11 @@ if __name__ == '__main__':
     
     for cfg in cfgs:
         autoplag.shuffle(cfg, ast_tree)
+        
+    dot = Digraph()
+    for cfg in cfgs:
+        cfg.to_image(ast_tree, dot)
+    dot.format = 'png'
+    dot.render('debug/shuffled_cfg')
+    
         

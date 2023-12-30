@@ -87,7 +87,10 @@ def build_cfgs(ast_tree):
             # ret_val = entry_chunk
         
         elif isinstance_ControlFlow(node):
-                        
+            # Note, the order of child nodes for control flow must stay consistent,
+            # because later shuffle.py uses the order to reconstruct the ast
+            # The DirectedGraph object will preserve edge order as insertion order
+            
             if isinstance(node, cst.For):
                 iprint('treewalk For', first_line(node, ast_tree))
                 
@@ -158,7 +161,7 @@ def build_cfgs(ast_tree):
                 body_chunk_entry = new_chunk()
                 cfg.add_edge(entry_chunk, body_chunk_entry)
                 
-                body_chunk_exit = treewalk(node.body, body_chunk_entry)
+                body_chunk_exit = treewalk(node.body, body_chunk_entry, cfg)
                 
                 # Do this beofre if_gather so the chunk order is right
                 if node.orelse:
