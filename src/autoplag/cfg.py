@@ -6,7 +6,7 @@ Much thanks to staticfg, which served as a primer as I was puzzlling over this
 '''
 
 import libcst as cst
-from autoplag import DirectedGraph, Chunk, isinstance_ControlFlow, isinstance_NonWhitespace
+from autoplag import DirectedGraph, Chunk, first_line, isinstance_ControlFlow, isinstance_NonWhitespace
     
 indents = 0
 def indent():
@@ -27,31 +27,41 @@ def iprint(*kwargs):
     print(*kwargs)
 
 def build_cfg(ast_tree):
+    '''
+    Builds CFG, inserting nodes into a graph structure, where graph verticies are BBs (Chunks)
+    
+    Note: as python is pass-by-ref, nodes are simply references to the ones existing in the CST tree.
+    We do not modify the CST nodes at all
+     
+    Control flow nodes are the last statement in a chunk. So the body of a control flow node is ref'd 
+    twice, indirectly within the control flow node at the end of the Chunk and directly in the sucessor Chunks.
+    '''
+    
     cfg = DirectedGraph()    
     
     print('\nTree walk uwu')
     
-    def first_line(node):
-        try:
-            return ast_tree.code_for_node(node).strip().split('\n')[0]
-        except:
-            return 'No code for type ' + type(node).__name__
+    # Creates new chunk, adds to cfg, and sets order 
+    def new_chunk():
+        new_chunk = Chunk()
+        new_chunk.order = len(cfg.objects)
+        cfg.add_chunk(new_chunk)
+        return new_chunk
     
     def treewalk(node, entry_chunk: Chunk):
-        # iprint('treewalk', first_line(node))
         indent()
         
         ret_val = None
         
         # Basecase, boring statements
         if isinstance(node, cst.BaseSmallStatement):
-            iprint('treewalk plain statement', first_line(node))
+            iprint('treewalk plain statement', first_line(node, ast_tree))
             entry_chunk.append(node)
             ret_val = entry_chunk
                                       
         # Container, needs to be iterated to get to SimpleStatementLine  
         elif isinstance(node, cst.IndentedBlock):
-            iprint('treewalk indented block', type(node).__name__, first_line(node))
+            iprint('treewalk indented block', first_line(node, ast_tree))
             for child in filter(isinstance_NonWhitespace, node.children):                                                        
                 iprint('|__')
                 
@@ -62,7 +72,7 @@ def build_cfg(ast_tree):
         
         # Container, needs to be iterated to get to statements
         elif isinstance(node, cst.SimpleStatementLine):
-            iprint('treewalk StatementLine', first_line(node))
+            iprint('treewalk StatementLine', first_line(node, ast_tree))
             
             for child in filter(isinstance_NonWhitespace, node.children):                                                        
                 iprint('|__')
@@ -77,62 +87,90 @@ def build_cfg(ast_tree):
         elif isinstance_ControlFlow(node):
                         
             if isinstance(node, cst.For):
-                iprint('treewalk For', first_line(node))
+                iprint('treewalk For', first_line(node, ast_tree))
                 
                 # Make new blocks for each
-                for_base = cfg.add_node(Chunk())
+                for_base = new_chunk()
                 for_base.append(node)
                 cfg.add_edge(entry_chunk, for_base)
                 
-                loop_chunk_entry = cfg.add_node(Chunk())
+                loop_chunk_entry = new_chunk()
                 loop_chunk_exit = treewalk(node.body, loop_chunk_entry)
                 
                 cfg.add_edge(for_base, loop_chunk_entry)
                 cfg.add_edge(loop_chunk_exit, for_base)
                 
-                for_gather = cfg.add_node(Chunk())
+                # Do this first so the chunk order is before for_gather
+                if node.orelse:
+                    orelse_chunk_entry = new_chunk()
+                    
+                for_gather = new_chunk()
+                
+                if node.orelse:
+                    cfg.add_edge(while_base, orelse_chunk_entry)
+                    
+                    orelse_chunk_exit = treewalk(node.orelse.body, orelse_chunk_entry)
+                    
+                    cfg.add_edge(orelse_chunk_exit, for_gather)
+                
                 cfg.add_edge(for_base, for_gather)
                 
                 ret_val = for_gather
             
             elif isinstance(node, cst.While):
-                iprint('treewalk While', first_line(node))
+                iprint('treewalk While', first_line(node, ast_tree))
                 
                 # Make new blocks for each
-                while_base = cfg.add_node(Chunk())
+                while_base = new_chunk()
                 while_base.append(node)
                 cfg.add_edge(entry_chunk, while_base)
                 
-                loop_chunk_entry = cfg.add_node(Chunk())
+                loop_chunk_entry = new_chunk()
                 loop_chunk_exit = treewalk(node.body, loop_chunk_entry)
                 
                 cfg.add_edge(while_base, loop_chunk_entry)
                 cfg.add_edge(loop_chunk_exit, while_base)
                 
-                while_gather = cfg.add_node(Chunk())
+                # Do this before while_gather so the chunk order is right
+                if node.orelse:
+                    orelse_chunk_entry = new_chunk()
+                
+                while_gather = new_chunk()
                 cfg.add_edge(while_base, while_gather)
                 
+                if node.orelse:
+                    cfg.add_edge(while_base, orelse_chunk_entry)
+                    
+                    orelse_chunk_exit = treewalk(node.orelse.body, orelse_chunk_entry)
+                    
+                    cfg.add_edge(orelse_chunk_exit, while_gather)
+                    
                 ret_val = while_gather
             
             elif isinstance(node, cst.If):
-                iprint('treewalk If', first_line(node))
+                iprint('treewalk If', first_line(node, ast_tree))
                 
                 # Make new blocks for each
                 entry_chunk.append(node)
                 
-                if_gather = cfg.add_node(Chunk())
                 
-                body_chunk_entry = cfg.add_node(Chunk())
+                
+                body_chunk_entry = new_chunk()
                 cfg.add_edge(entry_chunk, body_chunk_entry)
                 
                 body_chunk_exit = treewalk(node.body, body_chunk_entry)
+                
+                # Do this beofre if_gather so the chunk order is right
+                if node.orelse:
+                    orelse_chunk_entry = new_chunk()
+                    
+                if_gather = new_chunk()
                 cfg.add_edge(body_chunk_exit, if_gather)
                 
                 if node.orelse:
-                    bottom_chunk_entry = cfg.add_node(Chunk())
-                    cfg.add_edge(entry_chunk, bottom_chunk_entry)
+                    cfg.add_edge(entry_chunk, orelse_chunk_entry)
                     
-                    bottom_chunk_exit = treewalk(node.orelse.body, bottom_chunk_entry)
+                    bottom_chunk_exit = treewalk(node.orelse.body, orelse_chunk_entry)
                     
                     cfg.add_edge(bottom_chunk_exit, if_gather)
                 
@@ -142,7 +180,7 @@ def build_cfg(ast_tree):
                 raise Exception()
             
         elif isinstance(node, cst.FunctionDef):
-            iprint('treewalk FunctionDef:', first_line(node))
+            iprint('treewalk FunctionDef:', first_line(node, ast_tree))
             
             ret_val = treewalk(node.body, entry_chunk)
         
@@ -154,7 +192,7 @@ def build_cfg(ast_tree):
             
     assert(isinstance(ast_tree, cst.Module))
     for function in ast_tree.children:
-        entry_chunk = cfg.add_node(Chunk())
+        entry_chunk = new_chunk()
         exit_chunk = treewalk(function, entry_chunk)
     
     return cfg

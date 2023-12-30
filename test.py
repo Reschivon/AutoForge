@@ -1,13 +1,4 @@
 def foo():
-    
-    
-    
-    
-    
-    
-    
-    
-      
     x = 4
     y = 7
     while x <= c:
@@ -18,3 +9,5 @@ def foo():
             y = x + 1
             x = x + 1  
         x = x + 1
+        
+    # Comment hehe

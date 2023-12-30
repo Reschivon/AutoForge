@@ -4,7 +4,7 @@ AutoPag is a tool that paraphrases code, rewriting it to _look_ different while 
 
 Limited to Python3 for this proof-of-concept.
 
-This tool can very much be used for plagarism. That's the point -- I'm demonstating that MOSS is a rather poor defense and that plagarism is not only viable, but optimal in Computer Science. AutoPlag has been open sourced to inspire people to come up with better anticheat tools. 
+> Ethics note: this tool can definitely be used for plagarism. That's the point -- I'm demonstating that MOSS is a rather poor defense and that plagarism is not only viable, but optimal in Computer Science. AutoPlag has been open sourced to inspire people to come up with better anticheat tools. 
 
 Of course, by using this tool you are responsible for anything that happens to you. Cheat responsibly!
 
@@ -21,18 +21,35 @@ For diagnostic fans, have `graphviz` installed
 
 Goal is to modify at least one line in every 3-line chunk to break MOSS fingerprinting. (The k-value is not exactly three lines but this is a good enough approximation for now)
 
-1. Statement reordering. After building Def/Use chains (requiring CFG and RDA), we can generate predecessor/sucessor constraints for each statement and randomize the order under such constraints. Then we check if the 3-lines rule has been met for every line.
+1. Statement reordering. After building Use-Def chains (requiring CFG and RDA), we can generate a set of predecessor constraints for each statement that will define what reorderings preserve semantics. For example, for a statement x, IN(X) ∩ USE(X) are the set of instructions that must come before x. 
+
+    As a rule of thumb, x should not move outside its scope. It can if it does not clash with with other definitions of x at the control merge/split point, but generally checking this is rather tedious and
+    such these opportunities are rare in practice.
+    
+    There are cases where we can move x to the scope preheader, if it has no dependencies on anything within the scope. (Note: for this, check dependencies before and after)
+    
+    If x is dependent on a definition after it (such as for a loop) then x must stay in scope and come before the definition.
+
+    Then we check if the 3-line rule has been met for every line.
 
 2. If the three line rule has not been met, then it's likely we have some tightly woven data dependencies, like
     ```
     b = a
-    c = b
+    c = b + x + y + z + zz + zzz
     d = c
     ``` 
 
-    It's possible the expressions are trivial and without side effects like the above example, in which case, we'll do subexpression substitution. 
+    It's possible the expressions are trivial like line 1 and 3, allowing us to do subexpression elimination to saisfy the 3-line rule, but such cases are rare because it looks awkward to the programmer. However, we can do the opposite by breaking line 2 (long fellow) into subexpressions. We'll split the subexpression tree into 2 (or more) parts, assigning it to a plausible temporary.
+    
+     ```
+    b = a
+    tempc = b + x + y
+    temppc = z + zz + zzz
+    c = tempc + temppc
+    d = c
+    ``` 
 
-3. If expressions cannot be substituted (eg. it has side effects or longer than a hardcoded sus-threshold), then we'll break an expression into multiple temporaries. The only issue with this is producing plausible names for the temporaries beyond `temp1`, `temp2`, `temp3`
+    The only issue with this is producing plausible names for the temporaries beyond `temp1`, `temp2`, `temp3`
 
 4. Comments and whitespace remain, which MOSS ignores, but by chance an eagle-eyed human can see that they were copied. This stage strips all comments and randomly changes single spaces to no-space and no-space to single space.
 
@@ -41,7 +58,9 @@ Goal is to modify at least one line in every 3-line chunk to break MOSS fingerpr
     ```
 
 ## AST Representation
-In Python 3.10 (and now backported to 3.9) there is advanced native support for code-to-ast and ast-to-code conversion, which makes old tools like `astor` obsolete. By chance I also found a newer ~~ast~~ cst representation called PyCST, which is slightly better.
+In Python 3.10 (and now backported to 3.9) there is advanced native support for code-to-ast and ast-to-code conversion, which makes old tools like `astor` obsolete. I also found a newer ~~ast~~ cst representation called libCST, which is slightly better.
 
-PyCST preseves whitespace and comments, allowing us to make a roundtrip from source to CST to source without losing any information. This way we can selectively mix n' match whitespace patterns to make it look human. Plus, PyCST has better documentation and API. 
+PyCST preseves whitespace and comments, allowing us to make a roundtrip from source to CST to source without losing any information. This way we can selectively mix n' match whitespace patterns to make it look human. Plus, libCST has better documentation and API. 
+
+There's also RedBaron but it hasn't been maintained for a while.
 

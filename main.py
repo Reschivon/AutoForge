@@ -1,6 +1,5 @@
 
 import sys
-import ast
 import libcst as cst
 
 import autoplag
@@ -10,7 +9,7 @@ def tree_to_graph(ast_tree: cst.Module):
     graph = autoplag.DirectedGraph()
     
     def tree_walk(node):
-        graph.add_node(node)
+        graph.add_chunk(node)
         for child in node.children:
             tree_walk(child)
             graph.add_edge(node, child)
@@ -28,7 +27,7 @@ if __name__ == '__main__':
         code = file.read()
         
     ast_tree = cst.parse_module(code)
-    
+        
     print('Regenerated:', ast_tree.code, sep='\n')
     
     graph = tree_to_graph(ast_tree)
@@ -42,5 +41,5 @@ if __name__ == '__main__':
     dot.format = 'png'
     dot.render('debug/cfg')
     
-    autoplag.rda(cfg, ast_tree)
+    autoplag.run_rda(cfg, ast_tree)
         
