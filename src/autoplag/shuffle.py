@@ -12,7 +12,7 @@ def shuffle(cfg: DirectedGraph, ast: cst.Module):
     stmt_order: Dict[cst.CSTNode, StmtData] = {}
     for chunk in cfg:
         for stmt_data in chunk.stmts: 
-            stmt_order[stmt_data.stmt] = stmt_data
+            stmt_order[stmt_data.node] = stmt_data
             
             
     # Before we do the inversion below, we have to compute scope limits
@@ -33,7 +33,7 @@ def shuffle(cfg: DirectedGraph, ast: cst.Module):
                 # extract its order using the `stmt_order` map
                 if stmt_data.order < stmt_order[dep_stmt].order:
                     # Invert the dep, so dep_stmt has it
-                    stmt_order[dep_stmt].deps.add(stmt_data.stmt)
+                    stmt_order[dep_stmt].deps.add(stmt_data.node)
                     # Remove the dep from the original stmt
                     stmt_data.deps.remove(dep_stmt)
                     
@@ -43,7 +43,7 @@ def shuffle(cfg: DirectedGraph, ast: cst.Module):
     for chunk in cfg:
         for stmt_data in chunk.stmts: 
             
-            print(first_line(stmt_data.stmt, ast), '\tDEPS:', 
+            print(first_line(stmt_data.node, ast), '\tDEPS:', 
                 # 'gens', [first_line(gen, ast) for gen in stmt_data.gens], \
                 #   '\tkills', [first_line(s, ast) for s in stmt_data.kills], \
                   ' ', [first_line(s, ast) for s in stmt_data.deps] )
@@ -55,7 +55,7 @@ def shuffle(cfg: DirectedGraph, ast: cst.Module):
     chunks.sort(key=lambda chunk: chunk.order)
     
     # Shuffle
-    print('Shuffling', first_line(cfg.func, ast))
+    print('\n\n====== Shuffling', first_line(cfg.func, ast))
     
     # chunk.stmts -> insertable -> new_stmts
     for chunk in chunks:
@@ -72,8 +72,8 @@ def shuffle(cfg: DirectedGraph, ast: cst.Module):
                     chunk.stmts.remove(stmt)
                     
         # No-deps statements are always insertable
-        print('initial stmts', stringify(chunk.stmts, ast))
-        print('initial deps', [stringify(stmt.deps, ast) for stmt in chunk.stmts])
+        print('\tinitial stmts', stringify(chunk.stmts, ast))
+        print('\tinitial deps', [stringify(stmt.deps, ast) for stmt in chunk.stmts])
         insert_stmts_with_no_deps()
         
         while len(insertable) > 0:            
@@ -91,8 +91,8 @@ def shuffle(cfg: DirectedGraph, ast: cst.Module):
                 
                 for stmt in recmp_chunk.stmts:
                     # Remove dependency if it was just inserted
-                    if new_stmts[-1].stmt in stmt.deps:
-                        stmt.deps.remove(new_stmts[-1].stmt)
+                    if new_stmts[-1].node in stmt.deps:
+                        stmt.deps.remove(new_stmts[-1].node)
             
             # Recompute insertable
             insert_stmts_with_no_deps()

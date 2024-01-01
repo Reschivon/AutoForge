@@ -5,9 +5,10 @@
 Much thanks to staticfg, which served as a primer as I was puzzlling over this
 '''
 
-from typing import List
+from typing import Dict, List, Tuple
 import libcst as cst
-from autoplag import DirectedGraph, Chunk, first_line, isinstance_ControlFlow, isinstance_NonWhitespace
+from autoplag import DirectedGraph, Chunk, first_line, isinstance_ControlFlow, isinstance_Whitespace
+from autoplag.common_structures import isinstance_Definition
 from autoplag.rda import stringify
     
 indents = 0
@@ -35,9 +36,13 @@ def iprint(*kwargs):
 
 def build_cfgs(ast_tree):
     '''
-    Returns a list of CFGs, one per function. Creates a graph structure, where verticies are 
+    Returns a list of tuples (cst.FunctionDef, CFG), one per function. Creates a graph structure, where verticies are 
     BBs (Chunks). Each CFG contains a .func member referencing the corresponding function node,
     and a .entry member for first Chunk
+    
+    Note: This returns a list in nesting order, such that nested functions ALWAYS come before
+    their parents. This is because, when we replace functions with their nested counterparts later,
+    we need to swap functions in nesting order (smallest to largest) or else overwrite the small ones. 
         
     Note: as python is pass-by-ref, nodes are simply references to the ones existing in the CST tree.
     We do not modify the CST nodes at all
@@ -46,10 +51,17 @@ def build_cfgs(ast_tree):
     twice, indirectly within the control flow node at the end of the Chunk and directly in the sucessor Chunks.
     '''
     
-    
+    assert(isinstance(ast_tree, cst.Module))
+    cfgs: List[Tuple[cst.FunctionDef, DirectedGraph]] = []
+        
     print('\nTree walk uwu')
     
-    def treewalk(node: cst.FunctionDef, entry_chunk: Chunk, cfg: DirectedGraph):        
+    def treewalk(node: cst.Module, entry_chunk: Chunk, cfg: DirectedGraph):  
+        '''
+        When called on a Module or ClassDef: returns nothing, adds child functionDefs to cfg list
+        When called on a FunctionDef: returns nothing, adds the CFG for the function to cfg list, and any child functions
+        When called on structure within a function: converts the structure to cfg subgraph, adds to cfg object, returns new active chunk
+        '''      
         # Creates new chunk, adds to cfg, and sets order 
         def new_chunk():
             new_chunk = Chunk()
@@ -67,9 +79,9 @@ def build_cfgs(ast_tree):
             entry_chunk.append(node)
             ret_val = entry_chunk
             
-        elif  not isinstance_NonWhitespace(node):
+        elif isinstance_Whitespace(node):
             # Ignore
-            # iprint('treewalk whitespace', first_line(node, ast_tree))
+            iprint('treewalk whitespace (ignored)', first_line(node, ast_tree))
             ret_val = entry_chunk
     
         # Container, needs to be iterated to get to SimpleStatementLine  
@@ -77,7 +89,7 @@ def build_cfgs(ast_tree):
             iprint('treewalk indented block', first_line(node, ast_tree))
             # for child in filter(isinstance_NonWhitespace, node.children):                                                        
             for child in node.children:                                                        
-                iprint('|__')
+                iprint('└──')
                 
                 # Reassign entry_chunk continuously
                 entry_chunk = treewalk(child, entry_chunk, cfg)
@@ -90,7 +102,7 @@ def build_cfgs(ast_tree):
             
             # for child in filter(isinstance_NonWhitespace, node.children):                                                        
             for child in node.children:   
-                iprint('|__')
+                iprint('└──')
                 
                 # Reassign entry_chunk continuously
                 entry_chunk = treewalk(child, entry_chunk, cfg)
@@ -196,42 +208,46 @@ def build_cfgs(ast_tree):
         elif isinstance(node, cst.FunctionDef):
             iprint('treewalk FunctionDef:', first_line(node, ast_tree))
             
-            ret_val = treewalk(node.body, entry_chunk, cfg)
+            # Prepare new cfg for this function
+            func_cfg = DirectedGraph()
+            func_entry_chunk = Chunk()
+            func_entry_chunk.order = 0
+            func_cfg.add_chunk(func_entry_chunk)
+            
+            # Treewalk, append function contents to cfg
+            exit_chunk = treewalk(node.body, func_entry_chunk, func_cfg)
+            
+            func_cfg.func = node
+            func_cfg.entry = func_entry_chunk
+            
+            cfgs.append((node, func_cfg))
         
+            # Returns parent chunk
+            if entry_chunk: entry_chunk.append(node)
+            ret_val = entry_chunk
+        
+        elif isinstance(node, cst.Module) or isinstance(node, cst.ClassDef):
+            iprint('treewalk', type(node).__name__, ':', first_line(node, ast_tree))
+            
+            # Recurse into children, searching for FunctionDefs
+            for child in node.children:
+                iprint('└──')
+                treewalk(child, None, None)
         else:
-            raise Exception(type(node).__name__ + ' must be a Function node or a node found within a function')
+            raise Exception(type(node).__name__ + ' not handled in treewalk, probably bug')
         
         undent()
         return ret_val
-            
-    assert(isinstance(ast_tree, cst.Module))
     
-    cfgs: List[DirectedGraph] = []
-    
-    for function in ast_tree.children:
-        if isinstance(function, cst.EmptyLine): continue
-        
-        assert isinstance(function, cst.FunctionDef), type(function).__name__ + ' is not a function'
-
-        cfg = DirectedGraph()
-        entry_chunk = Chunk()
-        entry_chunk.order = len(cfg.objects)
-        cfg.add_chunk(entry_chunk)
-        
-        exit_chunk = treewalk(function, entry_chunk, cfg)
-        
-        cfg.func = function
-        cfg.entry = entry_chunk
-        
-        cfgs.append(cfg)
+    treewalk(ast_tree, None, None)
     
     return cfgs
 
 def find_if_join_point(ordered_chunks: List[Chunk], cfg: DirectedGraph, start_chunk: Chunk):
     '''
-    Cuz I'm not writing a dominiator algorithm
-    We actually have enough info to get away with not using dominators for
-    While and For. However for If we do need to compute the join point
+    Cuz I'm not writing a DF algorithm
+    We actually have enough info to get away with not needing dominators for
+    While and For. However, for `If` we do need the dominance frontier
     '''
     
     seen: set[Chunk] = set()
@@ -256,14 +272,14 @@ def find_if_join_point(ordered_chunks: List[Chunk], cfg: DirectedGraph, start_ch
             
         if curr_chunk.nesting == 0: 
             # print('join point of', start_chunk.order, 'is', curr_chunk.order)
-            # Clean the attributes we made
+            # Return from the function and clean the attributes we made
             for i in range(start_chunk.order, i + 1): 
                 delattr(ordered_chunks[i], 'nesting')
             return curr_chunk
 
 def cfg_to_ast(cfg: DirectedGraph, ast):  
     
-    print('Build AST for', cfg.func.name.value)
+    print('\nBuild AST for', cfg.func.name.value)
     
     # Build ordered chunks
     ordered_chunks: List[Chunk] = [None] * len(cfg.objects) 
@@ -285,11 +301,11 @@ def cfg_to_ast(cfg: DirectedGraph, ast):
             
             visited.add(curr_chunk)
             
-            iprint('\nbuild ast for', '\n'.join([ast.code_for_node(nodelet).strip().split('\n')[0] for nodelet in curr_chunk]))
+            iprint('build ast for', '\n'.join([ast.code_for_node(nodelet).strip().split('\n')[0] for nodelet in curr_chunk]))
             
             children = cfg.children(curr_chunk)
             
-            ends_in_ctrl = isinstance_ControlFlow(curr_chunk.stmts[-1].stmt)
+            ends_in_ctrl = isinstance_ControlFlow(curr_chunk.stmts[-1].node)
             iprint('ends_in_ctrl', ends_in_ctrl)
             
             if ends_in_ctrl:
@@ -298,15 +314,21 @@ def cfg_to_ast(cfg: DirectedGraph, ast):
                 normal_stmt_end = len(curr_chunk.stmts)
                 
             for stmt in curr_chunk.stmts[:normal_stmt_end]:
-                if not isinstance(stmt.stmt, cst.Comment):
-                    body.append(cst.SimpleStatementLine(body=[stmt.stmt]))
+                if isinstance(stmt.node, cst.Comment): continue
+                
+                if isinstance_Definition(stmt.node):
+                    # Do not wrap Definitions in a SimpleStatementLine
+                    body.append(stmt.node)
+                else:
+                    # Wrap these non-defs in in SimpleStatementLine
+                    body.append(cst.SimpleStatementLine(body=[stmt.node]))
             
             if len(children) == 0: 
                 assert not ends_in_ctrl
                 break
             
             if ends_in_ctrl:
-                end_stmt = curr_chunk.stmts[-1].stmt
+                end_stmt = curr_chunk.stmts[-1].node
                 
                 assert len(children) >= 2
                 
@@ -353,10 +375,14 @@ def cfg_to_ast(cfg: DirectedGraph, ast):
                         
         block = cst.IndentedBlock(body=body)
         return block
+    
+    indent()
         
     function: cst.FunctionDef = cfg.func
     entry_chunk = cfg.entry
-    body_block = build_ast(entry_chunk)    
+    body_block = build_ast(entry_chunk) 
+    
+    undent()   
     
     new_function = function.with_changes(body=body_block)
     

@@ -4,7 +4,7 @@ from typing import Collection, Dict, List, Set, Tuple
 import libcst as cst
 from libcst.metadata import PositionProvider
 from autoplag import DirectedGraph, AssignType, first_line, \
-    get_assignment_targets, isinstance_AssignType, isinstance_ControlFlow, isinstance_NonWhitespace, get_expression_ControlFlow
+    get_assignment_targets, isinstance_AssignType, isinstance_ControlFlow, get_expression_ControlFlow
         
 def empty(l):
     '''
@@ -18,28 +18,74 @@ def stringify(s, ast):
     '''
     return [first_line(ss, ast) for ss in s]
 
-def get_all_names(node: cst.CSTNode):
+def get_all_usages(node: cst.CSTNode):
     '''
-    Return all references to a name.
-    Beware: includes assignments on top of usages
+    Return all used objects in a function. This handles regular statements,
+    assignments (where the assign-target is ignored), function calls, etc
     '''
     
-    # Special case: the visitor only works for children of the given node,
-    # so if the node itself is a cst.Name it won't work
-    if isinstance(node, cst.Name):
-        return node.value
+    assert not isinstance(node, cst.Name), 'Call this function on full statements, not parts of one'
     
-    class UsesVisitor(cst.CSTVisitor):
-        def __init__(self) -> None:
-            self.names: List[cst.Name] = []
-
-        def visit_Name(self, node: cst.Name) -> bool:
-            self.names.append(node.value)
-            return True  # Recurse for whole subtree
+    uses: List[cst.Name] = []
+    
+    def treewalk(node):
+        '''
+        Walk the tree, looking for used variables, and add such names to the uses list
         
-    visitor = UsesVisitor()
-    node._visit_and_replace_children(visitor)
-    return visitor.names
+        Why treewalk and not cst.Visitor? Because we do complex type checks like isinstance_AssignType
+        Which is no supported by the visitor machinery
+        '''
+        
+        if isinstance(node, cst.Name):
+            # Base case
+            uses.append(node.value)
+            
+        elif isinstance(node, cst.Attribute):
+            # So we may get nested assignntypes like x.y.z
+            # In such a case we must generate a using name like 'x.y.z`
+            # and not simply 'x.y' or 'z' or etc.
+            def gen_attr_name_nested(node):
+                
+                if isinstance(node, cst.Name):
+                    # Base case
+                    return node.value
+                elif isinstance(node, cst.Attribute):
+                    return gen_attr_name_nested(node.value) \
+                        + '.' \
+                        + gen_attr_name_nested(node.attr)
+                
+                else:
+                    raise Exception()
+                     
+            treewalk(node.value)
+            
+        elif isinstance_AssignType(node):
+            # Ignore the target part
+            treewalk(node.value)
+                        
+        elif isinstance_ControlFlow(node):
+            # For control flow, only count the expression, ignore the body.
+            treewalk(get_expression_ControlFlow(node))
+            
+        elif isinstance(node, cst.Call):
+            # For calls, it may mutate the calle and arguments, so they are
+            # counted as USEs. Additionally, the function itself is counted too
+            for a in node.args:
+                treewalk(a)
+            treewalk(node.func)
+        elif isinstance(node, cst.CompFor):
+            # For something like for a in b, a is NOT a use
+            treewalk(node.iter)
+            if node.inner_comp_for: 
+                treewalk(node.inner_comp_for)
+            
+        else:
+            assert isinstance(node, cst.CSTNode)
+            # Recurse all children, no special treatment
+            for child in node.children:
+                treewalk(node)
+                
+    return uses
 
 def intersects(a: Collection, b: Collection) -> bool:
     return len(set(a).intersection(set(b))) > 0
@@ -57,8 +103,6 @@ def run_rda(cfg: DirectedGraph, ast: cst.Module):
         for stmt_data in chunk.stmts:
             print(stmt_data.ins, stmt_data.outs)
     '''  
-    wrapper = cst.MetadataWrapper(ast)
-    position = wrapper.resolve(PositionProvider)
     
     # Collect all definitions and build gen
     all_defs: List[Tuple[str, AssignType]] = []
@@ -66,26 +110,32 @@ def run_rda(cfg: DirectedGraph, ast: cst.Module):
     for chunk in cfg:
         for stmt_data in chunk.stmts:
             
-            gen_names = get_assignment_targets(stmt_data.stmt)
+            gen_names = get_assignment_targets(stmt_data.node)
             if empty(gen_names): continue
             
             # Add this stmt to its gen set
             # Yes, it's kinda redundant to add a statment to its own gen set
             # This is just here to be symmetrical to the kill set -- which
             # also contains a List of AssignType to reference other parts of the code
-            stmt_data.gens.add(stmt_data.stmt)
+            stmt_data.gens.add(stmt_data.node)
             
             # Add name -> stmt mapping to all_defs
-            gen_pairs = zip(gen_names, [stmt_data.stmt] * len(gen_names))
+            gen_pairs = zip(gen_names, [stmt_data.node] * len(gen_names))
             all_defs.extend(gen_pairs)
             
+    # Add function arguments to all_defs
+    # Note the statement reference will just be the FunctionDef itself
+    arg_gen_names = get_all_usages(cfg.func.params)
+    arg_gen_pairs = zip(arg_gen_names, [cfg.func] * len(arg_gen_names))
+    all_defs.extend(arg_gen_pairs)
+    
     # print('all_defs', [name + ': ' + first_line(s, ast) for name, s in all_defs])
     
     # Find assignments and build kill         
     for chunk in cfg:
         for stmt_data in chunk.stmts:
             # Get variable names of all gens
-            gens = get_assignment_targets(stmt_data.stmt)
+            gens = get_assignment_targets(stmt_data.node)
                         
             # Find all statements that generate a name that we kill here
             defs_intersected: List[Tuple[str, AssignType]] = list(filter(lambda deff: deff[0] in gens, all_defs))
@@ -96,7 +146,7 @@ def run_rda(cfg: DirectedGraph, ast: cst.Module):
             stmts_intersected: List[AssignType] = set(stmts_intersected)
             
             # Do not put yourself in the kill set
-            stmts_intersected.remove(stmt_data.stmt)
+            stmts_intersected.remove(stmt_data.node)
             stmt_data.kills.update(stmts_intersected)
             
     
@@ -120,6 +170,7 @@ def run_rda(cfg: DirectedGraph, ast: cst.Module):
                     # and then extract the last statement from each
                     sets_to_merge = [c[-1].outs for c in cfg.parents(chunk)]
                     
+                    # If this is the first block, then ins include the arguments
                     chunk[i].ins = set().union(*sets_to_merge)
                 else:
                     chunk[i].ins = chunk[i - 1].outs
@@ -142,24 +193,8 @@ def run_rda(cfg: DirectedGraph, ast: cst.Module):
     for chunk in cfg:
         for stmt_data in chunk.stmts:
             # Figure out uses
-            if isinstance_AssignType(stmt_data.stmt):
-                # Special case for assign types: do not call get_all_names on the whole
-                # node because that'll include the assign-targets, which are NOT usages
-                # instead we get all names in the expression part
-                stmt_data.uses = get_all_names(stmt_data.stmt.value)
-                            
-            elif isinstance_ControlFlow(stmt_data.stmt):
-                # Special case for control flow
-                # In our cfg, when we encounter a controlflow node at the end of a BB,
-                # we include the whole control flow block, including its body. However,
-                # for control flow we only case about usages in the expression, hence the special case
-                stmt_data.uses = get_all_names(get_expression_ControlFlow(stmt_data.stmt))
-                
-            elif isinstance(stmt_data.stmt, cst.CSTNode):
-                stmt_data.uses = get_all_names(stmt_data.stmt)
-                
-            else:
-                raise Exception() 
+            stmt_data.uses = get_all_usages(stmt_data.node)
+            print('Usages of', first_line(stmt_data.node, ast), stmt_data.uses)
                 
             # Find all members of IN set that intersect our use set
             # Because IN is a set of stmts which use is a set of variable names,
@@ -173,12 +208,15 @@ def run_rda(cfg: DirectedGraph, ast: cst.Module):
             # Find all members of IN set that intersect our kill set
             stmt_data.deps.update(stmt_data.kills.intersection(stmt_data.ins))
                     
+                    
+    print('\n\n====== RDA results for', first_line(cfg.func, ast))
+    
     # Print gen/kill
     print()
     for chunk in cfg:
         for stmt_data in chunk.stmts: 
             
-            print(first_line(stmt_data.stmt, ast), 
+            print(first_line(stmt_data.node, ast), 
                     # 'gens', [first_line(gen, ast) for gen in stmt_data.gens], \
                     #   '\tkills', [first_line(s, ast) for s in stmt_data.kills], \
                   '\n\tins', stringify(stmt_data.ins, ast), \
@@ -193,7 +231,8 @@ def run_rda(cfg: DirectedGraph, ast: cst.Module):
     for chunk in cfg:
         for stmt_data in chunk.stmts: 
             
-            print(first_line(stmt_data.stmt, ast), '\tDEPS:', 
+            print(first_line(stmt_data.node, ast), \
+                  '\n\tDEPS:', 
                 # 'gens', [first_line(gen, ast) for gen in stmt_data.gens], \
                 #   '\tkills', [first_line(s, ast) for s in stmt_data.kills], \
                   ' ', [first_line(s, ast) for s in stmt_data.deps] )

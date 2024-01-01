@@ -9,6 +9,10 @@ def isinstance_ControlFlow(node: cst.CSTNode):
         or isinstance(node, cst.While) \
         or isinstance(node, cst.For)
 
+def isinstance_Definition(node: cst.CSTNode):
+    return isinstance(node, cst.FunctionDef) \
+        or isinstance(node, cst.ClassDef) 
+
 def get_expression_ControlFlow(node: cst.CSTNode):
     '''
     Get the condition/expression part of a control flow statement
@@ -17,13 +21,23 @@ def get_expression_ControlFlow(node: cst.CSTNode):
     if isinstance(node, cst.While): return node.test
     if isinstance(node, cst.For): return node.iter
  
-def isinstance_NonWhitespace(node: cst.CSTNode):
+# def isinstance_NonWhitespace(node: cst.CSTNode):
+#     assert False, 'deprecated'
+    
+#     typename = type(node).__name__
+    
+#     return not ('Whitespace' in typename \
+#                 or 'Comma' in typename \
+#                 or 'EmptyLine' in typename \
+#                 or 'Newline' in typename)
+
+def isinstance_Whitespace(node: cst.CSTNode):
     typename = type(node).__name__
     
-    return not ('Whitespace' in typename \
-                or 'Comma' in typename \
-                or 'EmptyLine' in typename \
-                or 'Newline' in typename)
+    return 'Whitespace' in typename \
+            or 'Comma' in typename \
+            or 'EmptyLine' in typename \
+            or 'Newline' in typename
 
 '''
 Kept having to use this Union of assignable nodes so I made a meta-type
@@ -76,7 +90,7 @@ def first_line(node, ast):
     
     # Convenient cuz I keep calling this with StmtData instad StmtData.stmt
     if isinstance(node, StmtData):
-        node = node.stmt
+        node = node.node
         
     try:
         return ast.code_for_node(node).strip().split('\n')[0]
@@ -85,9 +99,9 @@ def first_line(node, ast):
 
 class StmtData:
     def __init__(self, 
-                 stmt: cst.BaseSmallStatement):
+                 node: cst.BaseSmallStatement):
         
-        self.stmt = stmt
+        self.node = node
         
         # Chunk index, intra-chunk order, generated during CFG
         # Such that, if statement x executes after y, then order x > y
@@ -128,7 +142,7 @@ class Chunk:
         '''
         
         # Note: do not copy the .stmt
-        stmts = map(lambda s: s.stmt, self.stmts)
+        stmts = map(lambda s: s.node, self.stmts)
         return stmts.__iter__()
     
     def __getitem__(self, index):
@@ -211,11 +225,11 @@ class DirectedGraph:
         for id, node in self.objects.items():
                         
             # Skip whitespace
-            # if 'Whitespace' in type(node).__name__ \
-            #     or 'Comma' in type(node).__name__ \
-            #     or 'EmptyLine' in type(node).__name__ \
-            #     or 'Newline' in type(node).__name__:
-            #     continue
+            if 'Whitespace' in type(node).__name__ \
+                or 'Comma' in type(node).__name__ \
+                or 'EmptyLine' in type(node).__name__ \
+                or 'Newline' in type(node).__name__:
+                continue
                         
             if isinstance(node, cst.CSTNode):
                 # For single nodes, show the node type and its first line of code

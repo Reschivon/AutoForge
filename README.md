@@ -10,15 +10,17 @@ Of course, by using this tool you are responsible for anything that happens to y
 
 
 ## Todo
-- parse classes correctly, and nested functions
-- function calle object is a dependency
-- function calls should assumed to modify the arguments and calle (if applicalbe)
+- DONE parse classes correctly, and nested functions
+- DONE function calls should assumed to modify the arguments and calle (if applicalbe)
+- DONE function parameters should be added to first IN
+
+(Better use discrimination)
 - in for loop comprehensions, the iteration variable is not USE
 - function call name is not a USE
-- function parameters should be added to first IN
+- properly parse self.xxx (attribute)
 
 ## Install
-You need Python > 3.9, but the code you're feeding in can be any valid Python 3 code. You also need `libcst` installed, which is on `pypi`
+You need Python >= 3.9, but the code you're feeding in can be any valid Python 3 code. You also need `libcst` installed, which is on `pypi`
 
 For diagnostic fans, have `graphviz` installed
 

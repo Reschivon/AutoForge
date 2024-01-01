@@ -38,32 +38,36 @@ if __name__ == '__main__':
     cfgs = autoplag.build_cfgs(ast_tree)
     
     dot = Digraph()
-    for cfg in cfgs:
+    for func_node, cfg in cfgs:
         cfg.to_image(ast_tree, dot)
     dot.format = 'png'
     dot.render('debug/cfg')
     
-    for cfg in cfgs:
+    for func_node, cfg in cfgs:
         autoplag.run_rda(cfg, ast_tree)
     
-    for cfg in cfgs:
+    for func_node, cfg in cfgs:
         autoplag.shuffle(cfg, ast_tree)
     
     dot = Digraph()
-    for cfg in cfgs:
+    for func_node, cfg in cfgs:
         cfg.to_image(ast_tree, dot)
     dot.format = 'png'
     dot.render('debug/shuffled_cfg')
     
-    
-    for cfg in cfgs:
+    # CFGS are in nesting order, with smaller functions fits. We replace the LARGEST functions
+    # before the smaller ones, hence the reversed iteration. This is because, if we swap the smaller
+    # function before the parent one, it'll eventually get overwritten by the parent's (old) copy 
+    # of the nested function
+    for func_node, cfg in reversed(cfgs):
         orig_func = cfg.func
         new_func = autoplag.cfg_to_ast(cfg, ast_tree)  
         ast_tree = ast_tree.visit(Psych(orig_func, new_func))
         
         print('generated', orig_func.name.value, '\n', ast_tree.code_for_node(new_func))
         # print('generated', new_func)
-    # print('Generated\n', ast_tree.code)
+        
+    print('Generated\n', ast_tree.code)
 
     
     
