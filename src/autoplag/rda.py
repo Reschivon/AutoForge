@@ -57,10 +57,17 @@ def get_all_usages(node: cst.CSTNode):
                 else:
                     raise Exception()
                      
-            treewalk(node.value)
+            uses.append(gen_attr_name_nested(node))
+            
+        elif isinstance(node, cst.CompFor):
+            # For something like for a in b, a is NOT a use
+            treewalk(node.iter)
+            if hasattr(node, 'inner_comp_for'): 
+                treewalk(node.inner_comp_for)
             
         elif isinstance_AssignType(node):
             # Ignore the target part
+            # Note CompFor is Assigntype but it's handled specially above
             treewalk(node.value)
                         
         elif isinstance_ControlFlow(node):
@@ -70,21 +77,31 @@ def get_all_usages(node: cst.CSTNode):
         elif isinstance(node, cst.Call):
             # For calls, it may mutate the calle and arguments, so they are
             # counted as USEs. Additionally, the function itself is counted too
-            for a in node.args:
-                treewalk(a)
-            treewalk(node.func)
-        elif isinstance(node, cst.CompFor):
-            # For something like for a in b, a is NOT a use
-            treewalk(node.iter)
-            if node.inner_comp_for: 
-                treewalk(node.inner_comp_for)
             
+            if isinstance(node.func, cst.Attribute):
+                # Caller name
+                uses.append(node.func.value.value)
+                # function name
+                uses.append(node.func.attr.value)
+                
+                for a in node.args:
+                    treewalk(a)
+                
+            elif isinstance(node.func, cst.Name):
+                # function name
+                uses.append(node.func.value)
+                for a in node.args:
+                    treewalk(a)
+            else:
+                raise Exception()
+                        
         else:
             assert isinstance(node, cst.CSTNode)
             # Recurse all children, no special treatment
             for child in node.children:
-                treewalk(node)
+                treewalk(child)
                 
+    treewalk(node)
     return uses
 
 def intersects(a: Collection, b: Collection) -> bool:
@@ -194,7 +211,6 @@ def run_rda(cfg: DirectedGraph, ast: cst.Module):
         for stmt_data in chunk.stmts:
             # Figure out uses
             stmt_data.uses = get_all_usages(stmt_data.node)
-            print('Usages of', first_line(stmt_data.node, ast), stmt_data.uses)
                 
             # Find all members of IN set that intersect our use set
             # Because IN is a set of stmts which use is a set of variable names,
