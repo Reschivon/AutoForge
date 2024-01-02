@@ -5,7 +5,8 @@ from autoforge.rda import get_usages, get_assignments
 uses_answers = [
     'x', ['x'],
     'x.y.z', ['x.y.z'],
-    'hi.go()', ['hi', 'go'],
+    'hi.go()', ['hi'],
+    'hi.foo.go()', ['hi.foo'],
     'a = b', ['b'],
     'for i in range(x): pass', ['range', 'x'],
     '[print("lol") for i in range(x)]', ['print', 'range', 'x'],
@@ -31,10 +32,11 @@ assign_answers = [
     'x = y', ['x'],
     'x.y.z = y', ['x.y.z'],
     'hi.go()', ['hi'],
+    'hi.foo.go()', ['hi.foo'],
     'for i in range(x): pass', ['i'],
-    '[print("lol") for i in range(x)]', ['i'],  # Note: skip control flow body
+    '[print("lol") for i in range(x)]', [],  # No persisting assignments, since 'i' is scoped to the comprehension
     'if b: print(o)', [], # Note: skip control flow body
-    'Glizzy(g)', ['g'],
+    'Glizzy(g)', [], # TODO Assume no args mutation for now
     '[beliefs for i, beliefs in enumerate(self.ghostBeliefs) if livingGhosts[i + 1]]', [],
 ]
 

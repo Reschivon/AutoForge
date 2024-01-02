@@ -4,32 +4,20 @@ AutoForge is a tool that paraphrases code, rewriting it to _look_ different whil
 
 Limited to Python3 for this proof-of-concept.
 
-> Ethics note: this tool can definitely be used for plagarism. That's the point -- I'm demonstating that MOSS is a rather poor defense and that plagarism is not only viable, but optimal in Computer Science. AutoForge has been open sourced to inspire people to come up with better anticheat tools. 
+> Note: this tool is meant as a demontration that MOSS and other common plagarism checkers are rather easy to evade, and instructors have been lured into a false sense of security. AutoForge has been open sourced to inspire people to come up with better anticheat tools. 
 
 Of course, by using this tool you are responsible for anything that happens to you. Cheat responsibly!
 
+## Quickstart
 
-## Todo
-- DONE parse classes correctly, and nested functions
-- DONE function calls should assumed to modify the arguments and calle (if applicalbe)
-- DONE function parameters should be added to first IN
-
-(Better use discrimination)
-- DONE in for loop comprehensions, the iteration variable is not USE
-- DONE function call name is not a USE
-- DONE properly parse self.xxx (attribute)
-- DONE Handle matching for nested attributes self vs self.x
-- DONE lambda captures (pain)
-- DONE lambdas in gernal (pain)
+```
+python3 main.py --input sample_code.py --output sample_rewritten.py
+```
 
 ## Install
 You need Python >= 3.9, but the code you're feeding in can be any valid Python 3 code. You also need `libcst` installed, which is on `pypi`
 
 For diagnostic fans, have `graphviz` installed
-
-## Usage 
-
-`python autoforge.py input-file.py`
 
 ## Transformations
 
@@ -76,4 +64,15 @@ In Python 3.10 (and now backported to 3.9) there is advanced native support for 
 PyCST preseves whitespace and comments, allowing us to make a roundtrip from source to CST to source without losing any information. This way we can selectively mix n' match whitespace patterns to make it look human. Plus, libCST has better documentation and API. 
 
 There's also RedBaron but it hasn't been maintained for a while.
+
+## Todo
+- DONE parse classes correctly, and nested functions
+- DONE function calls should assumed to modify the arguments and calle (if applicalbe)
+- DONE function parameters should be added to first IN
+- DONE in for loop comprehensions, the iteration variable is not USE
+- DONE function call name is not a USE
+- DONE properly parse self.xxx (attribute)
+- DONE Handle matching for nested attributes self vs self.x
+- DONE lambda captures (pain)
+- DONE lambdas in gernal (pain)
 

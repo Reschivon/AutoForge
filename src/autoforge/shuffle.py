@@ -6,7 +6,10 @@ from autoforge import DirectedGraph, StmtData, first_line
 from autoforge import Chunk
 from autoforge.rda import stringify
 
-def random_index(list: List, prefer_not):
+def random_index(list: List, prefer_not=None):
+    if prefer_not is None:
+        return random.randint(0, len(list) - 1)
+    
     if list == [prefer_not]:
         return 0
     else:
@@ -90,7 +93,8 @@ def shuffle(cfg: DirectedGraph, ast: cst.Module):
         
         while len(insertable) > 0:            
             # Insert random allowable
-            i_to_remove = random_index(insertable, prefer_not=insertable[-1])
+            # i_to_remove = random_index(insertable, prefer_not=insertable[-1])
+            i_to_remove = random_index(insertable)
             new_stmts.append(insertable[i_to_remove])
             del insertable[i_to_remove]
             

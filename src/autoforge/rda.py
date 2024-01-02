@@ -1,11 +1,8 @@
 
-import itertools
 from typing import Collection, Dict, List, Set, Tuple
 import libcst as cst
-from libcst.metadata import PositionProvider
-from autoforge import DirectedGraph, AssignType, first_line, \
-    isinstance_AssignType, isinstance_ControlFlow, get_expression_ControlFlow
-from autoforge.common_structures import Functional, first_col, isinstance_Definition, isinstance_Functional
+from autoforge import DirectedGraph, AssignType, Functional, first_line, first_col, \
+    isinstance_AssignType, isinstance_ControlFlow, get_expression_ControlFlow, isinstance_Definition, isinstance_Functional
         
 def empty(l):
     '''
@@ -21,9 +18,9 @@ def stringify(s, ast):
 
 def gen_attr_name_nested(node):
     '''
-    # So we may get nested assignntypes like x.y.z
-    # In such a case we must generate a using name like 'x.y.z`
-    # and not simply 'x.y' or 'z' or etc.
+    So we may get nested assignntypes like x.y.z
+    In such a case we must generate a using name like 'x.y.z`
+    and not simply 'x.y' or 'z' or etc.
     '''
     if isinstance(node, cst.Name):
         # Base case
@@ -71,12 +68,34 @@ def get_usages(node: cst.CSTNode, cfgs=None):
                     
         uses.add(gen_attr_name_nested(node))
         
+    elif isinstance(node, (cst.BaseComp)):
+        # Comprehension functions, all contains some for ... in .. expresssion
+        # The issue is that the 'elt' expresssion may use a variable defined 
+        # the child Comp object, and should hence not be added to the use set
+        
+        # Strategy is get all names in the list comprehension, then remove the defined variables
+        
+        # All usages in the for loop 
+        all_usages = get_usages(node.for_in.iter, cfgs) # iter is the object to iterate over
+        if hasattr(node.for_in, 'ifs'): all_usages |= get_usages(node.for_in.ifs)
+        if hasattr(node.for_in, 'inner_comp_for'): all_usages |= get_usages(node.for_in.inner_comp_for)
+        
+        # All usages in the elt
+        all_usages |= get_usages(node.elt)
+        
+        # Defined variables
+        defs = get_usages(node.for_in.target, cfgs)
+        
+        # print('all compfor names', all_usages)
+        # print('target compfor defs', defs)
+        
+        all_usages.difference_update(defs)
+        
+        uses |= all_usages
+        
     elif isinstance(node, cst.CompFor):
-        print(node)
-        # For something like for a in b, a is NOT a use
-        uses |= get_usages(node.iter, cfgs)
-        if hasattr(node, 'inner_comp_for'): 
-            uses |= get_usages(node.inner_comp_for)
+        # should be handled above
+        raise Exception()
         
     elif isinstance_AssignType(node):
         # Ignore the target part
@@ -95,11 +114,14 @@ def get_usages(node: cst.CSTNode, cfgs=None):
         # counted as USEs. Additionally, the function itself is counted too
         
         if isinstance(node.func, cst.Attribute):
-            # Caller name
-            uses.add(gen_attr_name_nested(node.func.value))
-            # function name
-            uses.add(node.func.attr.value)
+            # For something like self.x.y(), self.x is added (since it's an object thta may mutate)
+            # but self.x.y (the function) isn't used since you can't assign a member function
             
+            full_name = gen_attr_name_nested(node.func)
+            name_without_last = '.'.join(full_name.split('.')[:-1])
+            uses.add(name_without_last)
+            
+            # Also deal with usages in the args
             for a in node.args:
                 uses |= get_usages(a, cfgs)
             
@@ -110,9 +132,12 @@ def get_usages(node: cst.CSTNode, cfgs=None):
                 uses |= get_usages(a, cfgs)
         else:
             raise Exception()
-                    
+             
+    elif isinstance(node, Tuple):
+        for item in node:
+            uses |= get_usages(item, cfgs)
     else:
-        assert isinstance(node, cst.CSTNode)
+        assert isinstance(node, cst.CSTNode), type(node).__name__ + ' is not a CSTNode'
         # Recurse all children, no special treatment
         for child in node.children:
             uses |= get_usages(child, cfgs)
@@ -141,8 +166,21 @@ def get_assignments(node: AssignType) -> Set[str]:
     elif isinstance_Definition(node):
         pass
     
+    elif isinstance(node, (cst.BaseComp)):
+        # Comprehension functions, all contains some for ... in .. expresssion
+        # The for loop part should not have any assignments, but the elt part may
+        
+        if isinstance(node.elt, cst.Name):
+            # Not proud of this. If the elt part is just a single name, like [x for x in range(...)]
+            # then if we do get_assignment(node.elt) it'll treat it as a assigment cuz it has no content
+            # But in this special case it's not an assignment, just a term in the ListComp hence the special case
+            pass
+        else:
+            targets |= get_assignments(node.elt)
+                
     elif isinstance(node, cst.CompFor):
-        targets |= get_assignments(node.target)
+        # should be handled above
+        raise Exception()
     
     elif isinstance_ControlFlow(node):
         # For control flow, count the expression, skip body
@@ -177,17 +215,25 @@ def get_assignments(node: AssignType) -> Set[str]:
     elif isinstance(node, cst.Call):
         # For calls, it may mutate the calle and arguments, so they are
         # counted as assignments.
-        
-        # TODO assume args aren't mutated
+                
+        # TODO assume args aren't mutated for now
                 
         if isinstance(node.func, cst.Attribute):
-            # Caller name
-            targets.add(gen_attr_name_nested(node.func.value))
+            # We get this for a function call on object, like self.x()
+            # Then the attribute node.func is 'self.x.y'
+            # We don't make a dependency on y (cant assign member function), but we do for 'self.x' since it may mutate
+            
+            full_name = gen_attr_name_nested(node.func)
+            name_without_last = '.'.join(full_name.split('.')[:-1])
+            targets.add(name_without_last)
            
             # for a in node.args:
             #     targets |= get_assignments(a)
             
         elif isinstance(node.func, cst.Name):
+            # So a simple func call, like print(x) where there is no object calle
+            # No mutations
+            
             # for a in node.args:
             #     targets |= get_assignments(a)
             pass
