@@ -20,8 +20,6 @@ pip install -e AutoForge
 python3 main.py --input sample_code.py --output sample_rewritten.py
 ```
 
-## Install
-
 
 ## Transformations
 
