@@ -2,9 +2,19 @@
 import random
 from typing import Dict, List, Tuple
 import libcst as cst
-from autoplag import DirectedGraph, StmtData, first_line
-from autoplag import Chunk
-from autoplag.rda import stringify
+from autoforge import DirectedGraph, StmtData, first_line
+from autoforge import Chunk
+from autoforge.rda import stringify
+
+def random_index(list: List, prefer_not):
+    if list == [prefer_not]:
+        return 0
+    else:
+        ii = list.index(prefer_not)
+        index = random.randint(0, len(list) - 2)
+        if index >= ii: index += 1
+        
+        return index
 
 def shuffle(cfg: DirectedGraph, ast: cst.Module):
     
@@ -12,6 +22,7 @@ def shuffle(cfg: DirectedGraph, ast: cst.Module):
     stmt_order: Dict[cst.CSTNode, StmtData] = {}
     for chunk in cfg:
         for stmt_data in chunk.stmts: 
+            assert isinstance(stmt_data.node, cst.CSTNode)
             stmt_order[stmt_data.node] = stmt_data
             
             
@@ -31,6 +42,7 @@ def shuffle(cfg: DirectedGraph, ast: cst.Module):
             for dep_stmt in stmt_data.deps.copy(): # Iter on copy because we modify the original 
                 # Since dep_stmt is a CSTNode and not a StmtData, we need to 
                 # extract its order using the `stmt_order` map
+                assert isinstance(dep_stmt, cst.CSTNode)
                 if stmt_data.order < stmt_order[dep_stmt].order:
                     # Invert the dep, so dep_stmt has it
                     stmt_order[dep_stmt].deps.add(stmt_data.node)
@@ -39,16 +51,16 @@ def shuffle(cfg: DirectedGraph, ast: cst.Module):
                     
                     
     # Print deps
-    print('Mixer inverted deps')
-    for chunk in cfg:
-        for stmt_data in chunk.stmts: 
+    # print('Mixer inverted deps')
+    # for chunk in cfg:
+    #     for stmt_data in chunk.stmts: 
             
-            print(first_line(stmt_data.node, ast), '\tDEPS:', 
-                # 'gens', [first_line(gen, ast) for gen in stmt_data.gens], \
-                #   '\tkills', [first_line(s, ast) for s in stmt_data.kills], \
-                  ' ', [first_line(s, ast) for s in stmt_data.deps] )
+    #         print(first_line(stmt_data.node, ast), '\tDEPS:', 
+    #             # 'gens', [first_line(gen, ast) for gen in stmt_data.gens], \
+    #             #   '\tkills', [first_line(s, ast) for s in stmt_data.kills], \
+    #               ' ', [first_line(s, ast) for s in stmt_data.deps] )
             
-            print()
+    #         print()
             
     # Build ordered list of Chunks from cfg
     chunks = list(cfg.objects.values())
@@ -78,7 +90,7 @@ def shuffle(cfg: DirectedGraph, ast: cst.Module):
         
         while len(insertable) > 0:            
             # Insert random allowable
-            i_to_remove = random.randint(0, len(insertable) - 1)
+            i_to_remove = random_index(insertable, prefer_not=insertable[-1])
             new_stmts.append(insertable[i_to_remove])
             del insertable[i_to_remove]
             

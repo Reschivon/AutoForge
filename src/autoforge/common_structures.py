@@ -4,13 +4,19 @@ from typing import Dict, List, NewType, Set, Optional, Union, Tuple
 import typing
 import libcst as cst
 
+def first_col(list):
+    '''
+    For list of tuple, get list with only nth elem of each
+    '''
+    return map(lambda t:t[0], list)
+
 def isinstance_ControlFlow(node: cst.CSTNode):
     return isinstance(node, cst.If) \
         or isinstance(node, cst.While) \
         or isinstance(node, cst.For)
 
 def isinstance_Definition(node: cst.CSTNode):
-    return isinstance(node, cst.FunctionDef) \
+    return isinstance_Functional(node) \
         or isinstance(node, cst.ClassDef) 
 
 def get_expression_ControlFlow(node: cst.CSTNode):
@@ -20,16 +26,6 @@ def get_expression_ControlFlow(node: cst.CSTNode):
     if isinstance(node, cst.If): return node.test
     if isinstance(node, cst.While): return node.test
     if isinstance(node, cst.For): return node.iter
- 
-# def isinstance_NonWhitespace(node: cst.CSTNode):
-#     assert False, 'deprecated'
-    
-#     typename = type(node).__name__
-    
-#     return not ('Whitespace' in typename \
-#                 or 'Comma' in typename \
-#                 or 'EmptyLine' in typename \
-#                 or 'Newline' in typename)
 
 def isinstance_Whitespace(node: cst.CSTNode):
     typename = type(node).__name__
@@ -39,6 +35,11 @@ def isinstance_Whitespace(node: cst.CSTNode):
             or 'EmptyLine' in typename \
             or 'Newline' in typename
 
+Functional = Union[cst.FunctionDef, cst.Lambda]
+
+def isinstance_Functional(node: cst.CSTNode):
+    return isinstance(node, cst.FunctionDef) or isinstance(node, cst.Lambda)
+
 '''
 Kept having to use this Union of assignable nodes so I made a meta-type
 '''
@@ -46,37 +47,6 @@ AssignType = Union[cst.Assign, cst.AugAssign, cst.AnnAssign, cst.CompFor]
 
 def isinstance_AssignType(node: cst.CSTNode):
     return isinstance(node, typing.get_args(AssignType))
-
-def get_assignment_targets(stmt: AssignType) -> Set[str]:
-    '''
-    Given a cst.CSTNode, if it is any assignment type like `a = b` or `a = b = c` it will return
-    all the assigned-to variables as str. 
-    
-    If there are no assigned-to variables or the node is not an assigment type, then you'll get 
-    empty list
-    '''
-    targets: Set[str] = set()
-     
-    if isinstance(stmt, cst.Assign):
-        for target in stmt.targets:
-            targets.add(target.target.value)
-            
-    elif isinstance(stmt, cst.AugAssign):
-        targets.add(stmt.target.value)
-        
-    elif isinstance(stmt, cst.AnnAssign) and stmt.value:
-        targets.add(stmt.target.value)
-        
-    elif isinstance(stmt, cst.CompFor) and stmt.value:
-        targets.add(stmt.target.value)
-        
-        if stmt.inner_comp_for:
-            targets.update(get_assignment_targets(stmt.inner_comp_for))
-        
-    else:
-        return set()
-    
-    return targets
 
 def first_line(node, ast):
     '''
@@ -91,6 +61,9 @@ def first_line(node, ast):
     # Convenient cuz I keep calling this with StmtData instad StmtData.stmt
     if isinstance(node, StmtData):
         node = node.node
+        
+    if isinstance(node, Tuple):
+        return '(' + ', '.join([first_line(c, ast) for c in node]) + ')'
         
     try:
         return ast.code_for_node(node).strip().split('\n')[0]
@@ -109,10 +82,11 @@ class StmtData:
         self.order: Tuple[int, int] = None
         
         # During RDA
-        self.gens: Set[AssignType] = set()
-        self.kills: Set[AssignType] = set()
-        self.ins: Set[AssignType] = set() 
-        self.outs: Set[AssignType] = set()
+        self.gens: Set[Tuple[str, AssignType]] = set()
+        self.kills: Set[Tuple[str, AssignType]] = set()
+        self.ins: Set[Tuple[str, AssignType]] = set() 
+        self.outs: Set[Tuple[str, AssignType]] = set()
+        
         self.uses: Set[str] = set()
         
         self.deps: Set[AssignType] = set()
@@ -260,11 +234,19 @@ class Psych(cst.CSTTransformer):
     leaving the new function in its place
     '''
     def __init__(self, orig_func, new_func):
-        self.orig_func: cst.FunctionDef = orig_func
-        self.new_func: cst.FunctionDef = new_func
+        self.orig_func: Functional = orig_func
+        self.new_func: Functional = new_func
 
     def leave_FunctionDef(
         self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef
+    ) -> cst.CSTNode:
+        
+        if original_node == self.orig_func:
+            return self.new_func
+        return updated_node
+    
+    def leave_Lambda(
+        self, original_node: cst.Lambda, updated_node: cst.Lambda
     ) -> cst.CSTNode:
         
         if original_node == self.orig_func:

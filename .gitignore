@@ -2,3 +2,4 @@
 **/*.egg-info
 debug/
 *.txt
+outputs.py

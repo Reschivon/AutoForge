@@ -3,12 +3,12 @@ import sys
 from graphviz import Digraph
 import libcst as cst
 
-import autoplag
-from autoplag.common_structures import Psych
+import autoforge
+from autoforge.common_structures import Psych
 
 def tree_to_graph(ast_tree: cst.Module):
     # Convert to graph
-    graph = autoplag.DirectedGraph()
+    graph = autoforge.DirectedGraph()
     
     def tree_walk(node):
         graph.add_chunk(node)
@@ -35,7 +35,7 @@ if __name__ == '__main__':
     dot.format = 'png'
     dot.render('debug/ast')
     
-    cfgs = autoplag.build_cfgs(ast_tree)
+    cfgs = autoforge.build_cfgs(ast_tree)
     
     dot = Digraph()
     for func_node, cfg in cfgs:
@@ -43,11 +43,14 @@ if __name__ == '__main__':
     dot.format = 'png'
     dot.render('debug/cfg')
     
+    # CFGS are listed in nesting order, with smaller functions first. Parent functions may define
+    # variables that are used as captures in nested function, so we do rda on nested ones first, and
+    # save unresolved captured to cfg.unresolved. Then the parent can read this
     for func_node, cfg in cfgs:
-        autoplag.run_rda(cfg, ast_tree)
+        autoforge.run_rda(cfg, ast_tree, cfgs)
     
     for func_node, cfg in cfgs:
-        autoplag.shuffle(cfg, ast_tree)
+        autoforge.shuffle(cfg, ast_tree)
     
     dot = Digraph()
     for func_node, cfg in cfgs:
@@ -55,13 +58,13 @@ if __name__ == '__main__':
     dot.format = 'png'
     dot.render('debug/shuffled_cfg')
     
-    # CFGS are in nesting order, with smaller functions fits. We replace the LARGEST functions
+    # CFGS are listed in nesting order, with smaller functions first. We replace the LARGEST functions
     # before the smaller ones, hence the reversed iteration. This is because, if we swap the smaller
     # function before the parent one, it'll eventually get overwritten by the parent's (old) copy 
     # of the nested function
     for func_node, cfg in reversed(cfgs):
         orig_func = cfg.func
-        new_func = autoplag.cfg_to_ast(cfg, ast_tree)  
+        new_func = autoforge.cfg_to_ast(cfg, ast_tree)  
         ast_tree = ast_tree.visit(Psych(orig_func, new_func))
         
         print('generated', orig_func.name.value, '\n', ast_tree.code_for_node(new_func))

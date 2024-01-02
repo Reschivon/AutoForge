@@ -1,10 +1,10 @@
-# AutoPlag
+# AutoForge
 
-AutoPag is a tool that paraphrases code, rewriting it to _look_ different while keeping the same functionality. This does not do trivial changes like renaming variables, but rather semantic transformations on the AST itself. It should evade MOSS, cursory human checks, and all but the most sophisticated plagarism tools.
+AutoForge is a tool that paraphrases code, rewriting it to _look_ different while keeping the same functionality. This does not do trivial changes like renaming variables, but rather semantic transformations on the AST itself. It should evade MOSS, cursory human checks, and all but the most sophisticated plagarism tools.
 
 Limited to Python3 for this proof-of-concept.
 
-> Ethics note: this tool can definitely be used for plagarism. That's the point -- I'm demonstating that MOSS is a rather poor defense and that plagarism is not only viable, but optimal in Computer Science. AutoPlag has been open sourced to inspire people to come up with better anticheat tools. 
+> Ethics note: this tool can definitely be used for plagarism. That's the point -- I'm demonstating that MOSS is a rather poor defense and that plagarism is not only viable, but optimal in Computer Science. AutoForge has been open sourced to inspire people to come up with better anticheat tools. 
 
 Of course, by using this tool you are responsible for anything that happens to you. Cheat responsibly!
 
@@ -15,9 +15,12 @@ Of course, by using this tool you are responsible for anything that happens to y
 - DONE function parameters should be added to first IN
 
 (Better use discrimination)
-- in for loop comprehensions, the iteration variable is not USE
-- function call name is not a USE
-- properly parse self.xxx (attribute)
+- DONE in for loop comprehensions, the iteration variable is not USE
+- DONE function call name is not a USE
+- DONE properly parse self.xxx (attribute)
+- DONE Handle matching for nested attributes self vs self.x
+- DONE lambda captures (pain)
+- DONE lambdas in gernal (pain)
 
 ## Install
 You need Python >= 3.9, but the code you're feeding in can be any valid Python 3 code. You also need `libcst` installed, which is on `pypi`
@@ -26,7 +29,7 @@ For diagnostic fans, have `graphviz` installed
 
 ## Usage 
 
-`python autoplag.py input-file.py`
+`python autoforge.py input-file.py`
 
 ## Transformations
 

@@ -7,9 +7,9 @@ Much thanks to staticfg, which served as a primer as I was puzzlling over this
 
 from typing import Dict, List, Tuple
 import libcst as cst
-from autoplag import DirectedGraph, Chunk, first_line, isinstance_ControlFlow, isinstance_Whitespace
-from autoplag.common_structures import isinstance_Definition
-from autoplag.rda import stringify
+from autoforge import DirectedGraph, Chunk, first_line, isinstance_ControlFlow, isinstance_Whitespace
+from autoforge.common_structures import Functional, isinstance_Definition, isinstance_Functional
+from autoforge.rda import stringify
     
 indents = 0
 def indent():
@@ -36,7 +36,7 @@ def iprint(*kwargs):
 
 def build_cfgs(ast_tree):
     '''
-    Returns a list of tuples (cst.FunctionDef, CFG), one per function. Creates a graph structure, where verticies are 
+    Returns a list of tuples (Functional, CFG), one per function. Creates a graph structure, where verticies are 
     BBs (Chunks). Each CFG contains a .func member referencing the corresponding function node,
     and a .entry member for first Chunk
     
@@ -52,7 +52,7 @@ def build_cfgs(ast_tree):
     '''
     
     assert(isinstance(ast_tree, cst.Module))
-    cfgs: List[Tuple[cst.FunctionDef, DirectedGraph]] = []
+    cfgs: List[Tuple[Functional, DirectedGraph]] = []
         
     print('\nTree walk uwu')
     
@@ -205,7 +205,7 @@ def build_cfgs(ast_tree):
             else:
                 raise Exception()
             
-        elif isinstance(node, cst.FunctionDef):
+        elif isinstance_Functional(node):
             iprint('treewalk FunctionDef:', first_line(node, ast_tree))
             
             # Prepare new cfg for this function
@@ -314,9 +314,10 @@ def cfg_to_ast(cfg: DirectedGraph, ast):
                 normal_stmt_end = len(curr_chunk.stmts)
                 
             for stmt in curr_chunk.stmts[:normal_stmt_end]:
-                if isinstance(stmt.node, cst.Comment): continue
+                if isinstance(stmt.node, cst.Comment) or isinstance(stmt.node, cst.SimpleString): 
+                    continue
                 
-                if isinstance_Definition(stmt.node):
+                elif isinstance_Definition(stmt.node):
                     # Do not wrap Definitions in a SimpleStatementLine
                     body.append(stmt.node)
                 else:
@@ -378,7 +379,7 @@ def cfg_to_ast(cfg: DirectedGraph, ast):
     
     indent()
         
-    function: cst.FunctionDef = cfg.func
+    function: Functional = cfg.func
     entry_chunk = cfg.entry
     body_block = build_ast(entry_chunk) 
     

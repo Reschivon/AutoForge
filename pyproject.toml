@@ -1,6 +1,6 @@
 
 [project]
-name = "autoplag"
+name = "autoforge"
 
 description = "Auto summarization of Python 3 code"
 readme = "README.md"
