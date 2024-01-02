@@ -10,14 +10,18 @@ Of course, by using this tool you are responsible for anything that happens to y
 
 ## Quickstart
 
+You need Python >= 3.9, but the code you're feeding in can be any valid Python 3 code. You also need `libcst` installed, which is on `pypi`
+
+For diagnostic fans, have `graphviz` installed
+
 ```
+git clone https://github.com/Reschivon/AutoForge
+pip install -e AutoForge
 python3 main.py --input sample_code.py --output sample_rewritten.py
 ```
 
 ## Install
-You need Python >= 3.9, but the code you're feeding in can be any valid Python 3 code. You also need `libcst` installed, which is on `pypi`
 
-For diagnostic fans, have `graphviz` installed
 
 ## Transformations
 
