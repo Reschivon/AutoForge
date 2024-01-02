@@ -45,7 +45,7 @@ if __name__ == '__main__':
     
     # CFGS are listed in nesting order, with smaller functions first. Parent functions may define
     # variables that are used as captures in nested function, so we do rda on nested ones first, and
-    # save unresolved captured to cfg.unresolved. Then the parent can read this
+    # save captures captured to cfg.captures. Then the parent can read this
     for func_node, cfg in cfgs:
         autoforge.run_rda(cfg, ast_tree, cfgs)
     
@@ -64,11 +64,12 @@ if __name__ == '__main__':
     # of the nested function
     for func_node, cfg in reversed(cfgs):
         orig_func = cfg.func
-        new_func = autoforge.cfg_to_ast(cfg, ast_tree)  
+        
+        new_func = autoforge.cfg_to_ast(cfg, ast_tree, remove_comments=True)  
+        
         ast_tree = ast_tree.visit(Psych(orig_func, new_func))
         
         print('generated', orig_func.name.value, '\n', ast_tree.code_for_node(new_func))
-        # print('generated', new_func)
         
     print('Generated\n', ast_tree.code)
 

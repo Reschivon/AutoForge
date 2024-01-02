@@ -52,9 +52,9 @@ def get_usages(node: cst.CSTNode, cfgs=None):
     if isinstance_Functional(node):
         found = False
         for func, cfg in cfgs:
-            if func == node and hasattr(cfg, 'unresolved'):
-                uses.update(cfg.unresolved)
-                print('using', func.name.value, cfg.unresolved)
+            if func == node and hasattr(cfg, 'captures'):
+                uses.update(cfg.captures)
+                print('using', func.name.value, cfg.captures)
                 found = True
                 break
         if not found:
@@ -360,7 +360,7 @@ def run_rda(cfg: DirectedGraph, ast: cst.Module, cfgs):
     # Set deps
     
     # store captures for later
-    cfg.unresolved = set()
+    cfg.captures = set()
         
     # TODO handle nasty edge cases better
     for chunk in cfg:
@@ -378,7 +378,7 @@ def run_rda(cfg: DirectedGraph, ast: cst.Module, cfgs):
                         success = True
                 if not success:
                     # Uses a definition that's not defined in the function, capture
-                    cfg.unresolved.add(used_name)
+                    cfg.captures.add(used_name)
                 
             # Find all members of IN set that intersect our kill set
             stmt_data.deps.update(stmt_data.kills.intersection(stmt_data.ins))

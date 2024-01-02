@@ -158,11 +158,11 @@ class DirectedGraph:
                 
     def add_edge(self, parent: cst.CSTNode, child: cst.CSTNode):
         
-        assert(id(parent) in self.objects and id(child) in self.objects,
-            'Cannot link objects that don\'t exist')
+        assert str(id(parent)) in self.objects and str(id(child)) in self.objects, \
+            'Cannot link objects that don\'t exist'
         
-        assert(str(id(parent)) in self.child_ids.keys())
-        assert(str(id(child)) in self.parent_ids.keys())
+        assert str(id(parent)) in self.child_ids.keys()
+        assert str(id(child)) in self.parent_ids.keys()
         
         self.child_ids[str(id(parent))].append(str(id(child)))
         self.parent_ids[str(id(child))].append(str(id(parent)))
@@ -241,7 +241,9 @@ class Psych(cst.CSTTransformer):
         self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef
     ) -> cst.CSTNode:
         
-        if original_node == self.orig_func:
+        # TODO, deal with funcs that have same names
+        if original_node.name.value == self.orig_func.name.value:
+            print('Replace', original_node.name.value, 'with', self.new_func.name.value)
             return self.new_func
         return updated_node
     

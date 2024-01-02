@@ -277,7 +277,7 @@ def find_if_join_point(ordered_chunks: List[Chunk], cfg: DirectedGraph, start_ch
                 delattr(ordered_chunks[i], 'nesting')
             return curr_chunk
 
-def cfg_to_ast(cfg: DirectedGraph, ast):  
+def cfg_to_ast(cfg: DirectedGraph, ast, remove_comments=True):  
     
     print('\nBuild AST for', cfg.func.name.value)
     
@@ -314,7 +314,9 @@ def cfg_to_ast(cfg: DirectedGraph, ast):
                 normal_stmt_end = len(curr_chunk.stmts)
                 
             for stmt in curr_chunk.stmts[:normal_stmt_end]:
-                if isinstance(stmt.node, cst.Comment) or isinstance(stmt.node, cst.SimpleString): 
+                if remove_comments \
+                    and isinstance(stmt.node, cst.Expr) \
+                    and isinstance(stmt.node.value, (cst.Comment, cst.SimpleString)): 
                     continue
                 
                 elif isinstance_Definition(stmt.node):
