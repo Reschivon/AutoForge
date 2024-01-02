@@ -228,9 +228,9 @@ class DirectedGraph:
                 
         return dot
     
-class Psych(cst.CSTTransformer):
+class Sike(cst.CSTTransformer):
     '''
-    Performs a Psych transformation on the given function,
+    Performs a Sike transformation on the given function,
     leaving the new function in its place
     '''
     def __init__(self, orig_func, new_func):

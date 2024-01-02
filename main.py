@@ -2,9 +2,9 @@
 import sys
 from graphviz import Digraph
 import libcst as cst
+import argparse
 
 import autoforge
-from autoforge.common_structures import Psych
 
 def tree_to_graph(ast_tree: cst.Module):
     # Convert to graph
@@ -21,11 +21,14 @@ def tree_to_graph(ast_tree: cst.Module):
     return graph
     
 if __name__ == '__main__':
-    input_file = sys.argv[1]
+    parser = argparse.ArgumentParser(description="Script description")
+    parser.add_argument("-i", "--input", help="Input file", required=True)
+    parser.add_argument("-o", "--output", help="Output file", required=True)
+    args = parser.parse_args()
     
-    print('Reading', input_file)
+    print('Reading', args.input)
     
-    with open(input_file, "r") as file:
+    with open(args.input, "r") as file:
         code = file.read()
         
     ast_tree = cst.parse_module(code)
@@ -67,11 +70,14 @@ if __name__ == '__main__':
         
         new_func = autoforge.cfg_to_ast(cfg, ast_tree, remove_comments=True)  
         
-        ast_tree = ast_tree.visit(Psych(orig_func, new_func))
+        ast_tree = ast_tree.visit(autoforge.Sike(orig_func, new_func))
         
         print('generated', orig_func.name.value, '\n', ast_tree.code_for_node(new_func))
         
     print('Generated\n', ast_tree.code)
+    with open(args.output, "w") as file:
+        file.write(ast_tree.code)
+    
 
     
     
