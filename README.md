@@ -4,7 +4,7 @@ AutoForge is a tool that paraphrases code, rewriting it to _look_ different whil
 
 Limited to Python3 for this proof-of-concept.
 
-> Note: this tool is meant as a demontration that MOSS and other common plagarism checkers are rather easy to evade, and instructors have been lured into a false sense of security. AutoForge has been open sourced to inspire people to come up with better anticheat tools. 
+> Note: AutoForge is a demontration that MOSS and other plagarism checkers are rather easy to evade, and course admin have been lured into a false sense of security. It's so easy to manually tweak a program to evade MOSS that it can be done programatically. AutoForge has been open sourced to inspire people to come up with better anticheat tools. 
 
 Of course, by using this tool you are responsible for anything that happens to you. Cheat responsibly!
 
@@ -20,6 +20,7 @@ pip install -e AutoForge
 python3 main.py --input sample_code.py --output sample_rewritten.py
 ```
 
+You can run on the same file again and again to get different randomized forgeries
 
 ## Transformations
 
@@ -63,7 +64,7 @@ Goal is to modify at least one line in every 3-line chunk to break MOSS fingerpr
 ## AST Representation
 In Python 3.10 (and now backported to 3.9) there is advanced native support for code-to-ast and ast-to-code conversion, which makes old tools like `astor` obsolete. I also found a newer ~~ast~~ cst representation called libCST, which is slightly better.
 
-PyCST preseves whitespace and comments, allowing us to make a roundtrip from source to CST to source without losing any information. This way we can selectively mix n' match whitespace patterns to make it look human. Plus, libCST has better documentation and API. 
+LibCST preseves whitespace and comments, allowing us to make a roundtrip from source to CST to source without losing any information. This way we can selectively mix n' match whitespace patterns to make it look human. Plus, libCST has better documentation and API. 
 
 There's also RedBaron but it hasn't been maintained for a while.
 
@@ -77,4 +78,7 @@ There's also RedBaron but it hasn't been maintained for a while.
 - DONE Handle matching for nested attributes self vs self.x
 - DONE lambda captures (pain)
 - DONE lambdas in gernal (pain)
+- Strip connected comments
+- new cfg
+- returns stay at end (maybe integrte into cfg)
 

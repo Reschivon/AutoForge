@@ -4,16 +4,16 @@ from typing import Dict, List, NewType, Set, Optional, Union, Tuple
 import typing
 import libcst as cst
 
-def first_col(list):
+def first_col(l):
     '''
     For list of tuple, get list with only nth elem of each
     '''
-    return map(lambda t:t[0], list)
+    return list(map(lambda t:t[0], l))
 
 def isinstance_ControlFlow(node: cst.CSTNode):
     return isinstance(node, cst.If) \
         or isinstance(node, cst.While) \
-        or isinstance(node, cst.For)
+        or isinstance(node, cst.For) 
 
 def isinstance_Definition(node: cst.CSTNode):
     return isinstance_Functional(node) \
@@ -30,10 +30,14 @@ def get_expression_ControlFlow(node: cst.CSTNode):
 def isinstance_Whitespace(node: cst.CSTNode):
     typename = type(node).__name__
     
+    wrapped = isinstance(node, cst.Expr) \
+                    and isinstance(node.value, (cst.Comment, cst.SimpleString))
+    
     return 'Whitespace' in typename \
             or 'Comma' in typename \
             or 'EmptyLine' in typename \
-            or 'Newline' in typename
+            or 'Newline' in typename \
+            or wrapped
 
 Functional = Union[cst.FunctionDef, cst.Lambda]
 
@@ -47,28 +51,6 @@ AssignType = Union[cst.Assign, cst.AugAssign, cst.AnnAssign, cst.CompFor]
 
 def isinstance_AssignType(node: cst.CSTNode):
     return isinstance(node, typing.get_args(AssignType))
-
-def first_line(node, ast):
-    '''
-    First line of code of the node
-    Special case: for placeholder nodes, I sometimes just slap in a str instead of initializing 
-                  a blank cst.CSTNode properly. In this case this function will just print the string
-    Error: If for some reason code is not available on the libCST side, this will print a generic error
-    '''
-    if isinstance(node, str):
-        return node
-    
-    # Convenient cuz I keep calling this with StmtData instad StmtData.stmt
-    if isinstance(node, StmtData):
-        node = node.node
-        
-    if isinstance(node, Tuple):
-        return '(' + ', '.join([first_line(c, ast) for c in node]) + ')'
-        
-    try:
-        return ast.code_for_node(node).strip().split('\n')[0]
-    except:
-        return 'No code for type ' + type(node).__name__
 
 class StmtData:
     def __init__(self, 
@@ -125,9 +107,9 @@ class Chunk:
         '''
         return self.stmts[index]
     
-    def end_on_unconditional_jump(self) -> bool:
+    def end_in_control_flow(self) -> bool:
         return len(self.stmts) > 0 and \
-              not isinstance_ControlFlow(self.stmts[-1])
+            isinstance_ControlFlow(self.stmts[-1].node)
 
 class DirectedGraph:
     '''
@@ -209,7 +191,10 @@ class DirectedGraph:
                 # For single nodes, show the node type and its first line of code
                 node_name = type(node).__name__
                 
-                node_name += '\n' + root.code_for_node(node).split('\n')[0]
+                try:
+                    node_name += '\n' + root.code_for_node(node).split('\n')[0]
+                except:
+                    node_name = 'error'
             else:
                 # For Chunks, iterate over nodes within and print the code for each node
                 node_name = '#' + str(node.order) + '\n'
@@ -237,9 +222,22 @@ class Sike(cst.CSTTransformer):
         self.orig_func: Functional = orig_func
         self.new_func: Functional = new_func
 
+    def leave_Module(
+        self, original_node: cst.Module, updated_node: cst.Module
+    ) -> cst.CSTNode:
+        
+        # TODO, deal with funcs that have same names
+        if isinstance(self.orig_func, cst.Module):
+            print('Replace top level code')
+            return self.new_func
+        return updated_node
+    
     def leave_FunctionDef(
         self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef
     ) -> cst.CSTNode:
+        
+        if not isinstance(self.orig_func, cst.FunctionDef):
+            return original_node
         
         # TODO, deal with funcs that have same names
         if original_node.name.value == self.orig_func.name.value:
@@ -250,6 +248,9 @@ class Sike(cst.CSTTransformer):
     def leave_Lambda(
         self, original_node: cst.Lambda, updated_node: cst.Lambda
     ) -> cst.CSTNode:
+        
+        if not isinstance(self.orig_func, cst.Lambda):
+            return original_node
         
         if original_node == self.orig_func:
             return self.new_func

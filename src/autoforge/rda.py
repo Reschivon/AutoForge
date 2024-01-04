@@ -1,20 +1,15 @@
 
 from typing import Collection, Dict, List, Set, Tuple
 import libcst as cst
-from autoforge import DirectedGraph, AssignType, Functional, first_line, first_col, \
+from autoforge import DirectedGraph, AssignType, Functional, first_col, \
     isinstance_AssignType, isinstance_ControlFlow, get_expression_ControlFlow, isinstance_Definition, isinstance_Functional
+from autoforge.printlib import bold, stringify, print
         
 def empty(l):
     '''
     Suprisingly useful
     '''
     return len(l) == 0
-
-def stringify(s, ast):
-    '''
-    Calls first_line on a Collection of nodes
-    '''
-    return [first_line(ss, ast) for ss in s]
 
 def gen_attr_name_nested(node):
     '''
@@ -51,7 +46,6 @@ def get_usages(node: cst.CSTNode, cfgs=None):
         for func, cfg in cfgs:
             if func == node and hasattr(cfg, 'captures'):
                 uses.update(cfg.captures)
-                print('using', func.name.value, cfg.captures)
                 found = True
                 break
         if not found:
@@ -314,7 +308,7 @@ def run_rda(cfg: DirectedGraph, ast: cst.Module, cfgs):
             print(stmt_data.ins, stmt_data.outs)
     '''  
     
-    print('\n\n====== RDA results for', first_line(cfg.func, ast))
+    print('\n\n====== RDA results for', cfg.func)
 
     
     all_defs: Set[Tuple[str, AssignType]] = set()
@@ -336,11 +330,14 @@ def run_rda(cfg: DirectedGraph, ast: cst.Module, cfgs):
                         
     # Add function arguments to all_defs
     # Note the statement reference will just be the FunctionDef itself
-    arg_gen_names = get_params(cfg.func.params)
-    arg_gen_pairs = set(zip(arg_gen_names, [cfg.func] * len(arg_gen_names)))
-    all_defs.update(arg_gen_pairs)
-    
-    print('all defs', [name + ': ' + first_line(s, ast) for name, s in all_defs])
+    if hasattr(cfg.func, 'params'):
+        arg_gen_names = get_params(cfg.func.params)
+        arg_gen_pairs = set(zip(arg_gen_names, [cfg.func] * len(arg_gen_names)))
+        all_defs.update(arg_gen_pairs)
+    else:
+        arg_gen_pairs = set()
+        
+    print('all defs', [name + ': ' + stringify(s) for name, s in all_defs])
 
     # Find assignments and build kill         
     for chunk in cfg:
@@ -403,14 +400,14 @@ def run_rda(cfg: DirectedGraph, ast: cst.Module, cfgs):
         # The only way to end the loop is here    
         if not changed: break
     
-    # Set deps
     
     # store captures for later
     cfg.captures = set()
         
     # TODO handle nasty edge cases better
+    # Figure out DEPs
     for chunk in cfg:
-        for stmt_data in chunk.stmts:
+        for index, stmt_data in enumerate(chunk.stmts):
             # Figure out uses
             stmt_data.uses = get_usages(stmt_data.node, cfgs)
                 
@@ -432,22 +429,32 @@ def run_rda(cfg: DirectedGraph, ast: cst.Module, cfgs):
             # Make deps satemtns-only
             stmt_data.deps = set(map(lambda t:t[1], stmt_data.deps))
                     
-            # Remove all deps that refer to function args (Just for TODO)
+            # Remove all deps that refer to function args 
             if cfg.func in stmt_data.deps: stmt_data.deps.remove(cfg.func)
+            
+            # Remove all deps that refer to self statement
+            if stmt_data.node in stmt_data.deps: stmt_data.deps.remove(stmt_data.node)
+            
+            # Special case: prints should be in order
+            # TODO consider if there are more such cases
+            if isinstance(stmt_data.node, cst.Expr) and gen_attr_name_nested(stmt_data.node.value.func) == 'print':
+                for s in reversed(chunk[0:index]):
+                    if isinstance(s.node, cst.Expr) and gen_attr_name_nested(s.node.value.func) == 'print':
+                        stmt_data.deps.add(s.node)
                         
     # Print gen/kill
     print()
     for chunk in cfg:
         for stmt_data in chunk.stmts: 
             
-            print(first_line(stmt_data.node, ast), 
-                    # 'gens', [first_line(gen, ast) for gen in stmt_data.gens], \
-                    #   '\tkills', [first_line(s, ast) for s in stmt_data.kills], \
-                  '\n\tuses', stringify(stmt_data.uses, ast), \
-                  '\n\tkills', stringify(stmt_data.kills, ast), \
-                  '\n\tgens', stringify(first_col(stmt_data.gens), ast), \
-                  '\n\tins', stringify(stmt_data.ins, ast), \
-                  '\n\touts', stringify(stmt_data.outs, ast))
+            print(stmt_data.node, 
+                    # 'gens', [first_line(gen for gen in stmt_data.gens], \
+                    #   '\tkills', [first_line(s for s in stmt_data.kills], \
+                  '\n\t', bold('uses'), stmt_data.uses, \
+                  '\n\t', bold('kills'), stmt_data.kills, \
+                  '\n\t', bold('gens'), first_col(stmt_data.gens), \
+                  '\n\t', bold('ins'), stmt_data.ins, \
+                  '\n\t', bold('outs'), stmt_data.outs)
                   
             
             print()
@@ -457,11 +464,11 @@ def run_rda(cfg: DirectedGraph, ast: cst.Module, cfgs):
     for chunk in cfg:
         for stmt_data in chunk.stmts: 
             
-            print(first_line(stmt_data.node, ast), \
-                  '\n\tDEPS:', 
-                # 'gens', [first_line(gen, ast) for gen in stmt_data.gens], \
-                #   '\tkills', [first_line(s, ast) for s in stmt_data.kills], \
-                  ' ', [first_line(s, ast) for s in stmt_data.deps] )
+            print(stmt_data.node, \
+                  '\n\t', bold('DEPS:'), 
+                # 'gens', [first_line(gen for gen in stmt_data.gens], \
+                #   '\tkills', [first_line(s for s in stmt_data.kills], \
+                  ' ', [s for s in stmt_data.deps] )
             
             print()
     

@@ -7,32 +7,9 @@ Much thanks to staticfg, which served as a primer as I was puzzlling over this
 
 from typing import Dict, List, Tuple
 import libcst as cst
-from autoforge import DirectedGraph, Chunk, first_line, isinstance_ControlFlow, isinstance_Whitespace
+from autoforge import DirectedGraph, Chunk, isinstance_ControlFlow, isinstance_Whitespace
 from autoforge.common_structures import Functional, isinstance_Definition, isinstance_Functional
-from autoforge.rda import stringify
-    
-indents = 0
-def indent():
-    global indents
-    indents += 1
-    
-    if indents > 13:
-        raise Exception('Indented more than a sane amount! (Is there a bug?)')
-
-def undent():
-    global indents
-    indents -= 1
-    
-def iprint(*kwargs):
-    to_print = ' '.join([str(k) for k in kwargs])
-    
-    global indents
-    indent_str = '    ' * indents
-    
-    indented_lines = [indent_str + line for line in to_print.split('\n')]
-    to_print = '\n'.join(indented_lines)
-
-    print(to_print)
+from autoforge.printlib import indent, undent, print
 
 def build_cfgs(ast_tree):
     '''
@@ -56,7 +33,7 @@ def build_cfgs(ast_tree):
         
     print('\nTree walk uwu')
     
-    def treewalk(node: cst.Module, entry_chunk: Chunk, cfg: DirectedGraph):  
+    def treewalk(node: cst.CSTNode, entry_chunk: Chunk, cfg: DirectedGraph):  
         '''
         When called on a Module or ClassDef: returns nothing, adds child functionDefs to cfg list
         When called on a FunctionDef: returns nothing, adds the CFG for the function to cfg list, and any child functions
@@ -74,22 +51,30 @@ def build_cfgs(ast_tree):
         ret_val = None
         
         # Basecase, boring statements
-        if isinstance(node, cst.BaseSmallStatement):
-            iprint('treewalk plain statement', first_line(node, ast_tree))
+        if isinstance(node, cst.Module) or isinstance(node, cst.ClassDef) or entry_chunk is None:
+            print('treewalk', type(node).__name__, ':', node)
+            
+            # Recurse into children, searching for FunctionDefs
+            for child in node.children:
+                print('└──')
+                treewalk(child, entry_chunk, cfg)
+                
+        elif isinstance(node, cst.BaseSmallStatement) or isinstance(node, cst.With): # TODo deal with With properly
+            print('treewalk plain statement', node)
             entry_chunk.append(node)
             ret_val = entry_chunk
             
         elif isinstance_Whitespace(node):
             # Ignore
-            iprint('treewalk whitespace (ignored)', first_line(node, ast_tree))
+            print('treewalk whitespace (ignored)', node)
             ret_val = entry_chunk
     
         # Container, needs to be iterated to get to SimpleStatementLine  
         elif isinstance(node, cst.IndentedBlock):
-            iprint('treewalk indented block', first_line(node, ast_tree))
+            print('treewalk indented block', node)
             # for child in filter(isinstance_NonWhitespace, node.children):                                                        
             for child in node.children:                                                        
-                iprint('└──')
+                print('└──')
                 
                 # Reassign entry_chunk continuously
                 entry_chunk = treewalk(child, entry_chunk, cfg)
@@ -98,11 +83,11 @@ def build_cfgs(ast_tree):
         
         # Container, needs to be iterated to get to statements
         elif isinstance(node, cst.SimpleStatementLine):
-            iprint('treewalk StatementLine', first_line(node, ast_tree))
+            print('treewalk StatementLine', node)
             
             # for child in filter(isinstance_NonWhitespace, node.children):                                                        
             for child in node.children:   
-                iprint('└──')
+                print('└──')
                 
                 # Reassign entry_chunk continuously
                 entry_chunk = treewalk(child, entry_chunk, cfg)
@@ -119,7 +104,7 @@ def build_cfgs(ast_tree):
             # Also, the `orelse` clauses in For and While connect back to the base
             # chunk to ease the process of converting back to ast
             if isinstance(node, cst.For):
-                iprint('treewalk For', first_line(node, ast_tree))
+                print('treewalk For', node)
                 
                 # Make new blocks for each
                 for_base = new_chunk()
@@ -147,7 +132,7 @@ def build_cfgs(ast_tree):
                 ret_val = for_gather
             
             elif isinstance(node, cst.While):
-                iprint('treewalk While', first_line(node, ast_tree))
+                print('treewalk While', node)
                 
                 # Make new blocks for each
                 while_base = new_chunk()
@@ -174,7 +159,7 @@ def build_cfgs(ast_tree):
                 ret_val = while_gather
             
             elif isinstance(node, cst.If):
-                iprint('treewalk If', first_line(node, ast_tree))
+                print('treewalk If', node)
                 
                 # Make new blocks for each
                 entry_chunk.append(node)
@@ -206,7 +191,7 @@ def build_cfgs(ast_tree):
                 raise Exception()
             
         elif isinstance_Functional(node):
-            iprint('treewalk FunctionDef:', first_line(node, ast_tree))
+            print('treewalk FunctionDef:', node)
             
             # Prepare new cfg for this function
             func_cfg = DirectedGraph()
@@ -223,24 +208,31 @@ def build_cfgs(ast_tree):
             cfgs.append((node, func_cfg))
         
             # Returns parent chunk
-            if entry_chunk: entry_chunk.append(node)
+            entry_chunk.append(node)
             ret_val = entry_chunk
         
-        elif isinstance(node, cst.Module) or isinstance(node, cst.ClassDef):
-            iprint('treewalk', type(node).__name__, ':', first_line(node, ast_tree))
-            
-            # Recurse into children, searching for FunctionDefs
-            for child in node.children:
-                iprint('└──')
-                treewalk(child, None, None)
         else:
             raise Exception(type(node).__name__ + ' not handled in treewalk, probably bug')
         
         undent()
         return ret_val
     
-    treewalk(ast_tree, None, None)
+    # Prepare root default cfg that holds everything
+    func_cfg = DirectedGraph()
+    func_entry_chunk = Chunk()
+    func_entry_chunk.order = 0
+    func_cfg.add_chunk(func_entry_chunk)
     
+    # Treewalk, append function contents to cfg
+    exit_chunk = treewalk(ast_tree, func_entry_chunk, func_cfg)
+    
+    func_cfg.func = ast_tree
+    func_cfg.entry = func_entry_chunk
+    
+    cfgs.append((ast_tree, func_cfg))
+    
+    # treewalk(ast_tree, None, None)
+            
     return cfgs
 
 def find_if_join_point(ordered_chunks: List[Chunk], cfg: DirectedGraph, start_chunk: Chunk):
@@ -262,16 +254,31 @@ def find_if_join_point(ordered_chunks: List[Chunk], cfg: DirectedGraph, start_ch
         parents = cfg.parents(curr_chunk)
         
         # Compute nesting
-        if len(parents) == 2:
+        if len(parents) == 2 \
+            and parents[0].order < curr_chunk.order \
+            and parents[1].order < curr_chunk.order:
             # Join point, either between THEN and ELSE branches,
             # or between THEN and IF header
-            curr_chunk.nesting = max(parents[0].nesting, parents[1].nesting) - 1
-        else:
-            assert len(parents) == 1
+            # This triggers also on While/For heads, with one parent being the body and one being the predecessor:
+            # we don't want this to happen and thus also check if the parent orders are both less
+            # print('Merger', parents[0].order, parents[1].order)
+            # print('      ', parents[0].nesting, parents[1].nesting)
+            if parents[0].nesting == parents[1].nesting:
+                curr_chunk.nesting = parents[0].nesting - 1
+                # print(curr_chunk.nesting)
+            else:
+                curr_chunk.nesting = min(parents[0].nesting, parents[1].nesting)
+                # print(curr_chunk.nesting)
+        elif len(parents) == 1:
             curr_chunk.nesting = parents[0].nesting + 1
+        else:
+            # While/For head
+            assert len(parents) == 2
+            curr_chunk.nesting = parents[0].nesting if hasattr(parents[0], 'nesting') else parents[1].nesting
             
         if curr_chunk.nesting == 0: 
             # print('join point of', start_chunk.order, 'is', curr_chunk.order)
+            
             # Return from the function and clean the attributes we made
             for i in range(start_chunk.order, i + 1): 
                 delattr(ordered_chunks[i], 'nesting')
@@ -279,7 +286,7 @@ def find_if_join_point(ordered_chunks: List[Chunk], cfg: DirectedGraph, start_ch
 
 def cfg_to_ast(cfg: DirectedGraph, ast, remove_comments=True):  
     
-    print('\nBuild AST for', cfg.func.name.value)
+    print('\nBuild AST for', cfg.func)
     
     # Build ordered chunks
     ordered_chunks: List[Chunk] = [None] * len(cfg.objects) 
@@ -301,12 +308,12 @@ def cfg_to_ast(cfg: DirectedGraph, ast, remove_comments=True):
             
             visited.add(curr_chunk)
             
-            iprint('build ast for', '\n'.join([ast.code_for_node(nodelet).strip().split('\n')[0] for nodelet in curr_chunk]))
+            print('==> Build AST for chunk #', curr_chunk.order) 
+            # print('\n'.join([ast.code_for_node(nodelet).strip().split('\n')[0] for nodelet in curr_chunk]),)
             
             children = cfg.children(curr_chunk)
             
-            ends_in_ctrl = isinstance_ControlFlow(curr_chunk.stmts[-1].node)
-            iprint('ends_in_ctrl', ends_in_ctrl)
+            ends_in_ctrl = curr_chunk.end_in_control_flow()
             
             if ends_in_ctrl:
                 normal_stmt_end = len(curr_chunk.stmts) - 1
@@ -319,8 +326,14 @@ def cfg_to_ast(cfg: DirectedGraph, ast, remove_comments=True):
                     and isinstance(stmt.node.value, (cst.Comment, cst.SimpleString)): 
                     continue
                 
+                elif isinstance(stmt.node, cst.Comment):
+                    continue
+                
                 elif isinstance_Definition(stmt.node):
                     # Do not wrap Definitions in a SimpleStatementLine
+                    body.append(stmt.node)
+                elif isinstance(stmt.node, cst.With): # TODO properly handle with
+                    # Do not wrap With in a SimpleStatementLine
                     body.append(stmt.node)
                 else:
                     # Wrap these non-defs in in SimpleStatementLine
@@ -336,18 +349,18 @@ def cfg_to_ast(cfg: DirectedGraph, ast, remove_comments=True):
                 assert len(children) >= 2
                 
                 if isinstance(end_stmt, cst.While):
-                    iprint('(ast for while)')
+                    print('(ast for while)')
                     
-                    body_block = build_ast(children[0])
-                    orelse_block = build_ast(children[1]) if len(children) == 3 else None
-                    body.append(end_stmt.with_changes(body=body_block, orelse=cst.Else((orelse_block))))
+                    end_stmt = end_stmt.with_changes(body=build_ast(children[0]))
+                    if len(children) == 3: end_stmt = end_stmt.with_changes(orelse=cst.Else(build_ast(children[1])))
+                    body.append(end_stmt)
                     curr_chunk = children[-1]
                     
                 elif isinstance(end_stmt, cst.For):
                     children = cfg.children(curr_chunk)
-                    body_block = build_ast(children[0])
-                    orelse_block = build_ast(children[1]) if len(children) == 3 else None
-                    body.append(end_stmt.with_changes(body=body_block, orelse=cst.Else(orelse_block)))
+                    end_stmt = end_stmt.with_changes(body=build_ast(children[0]))
+                    if len(children) == 3: end_stmt = end_stmt.with_changes(orelse=cst.Else(build_ast(children[1])))
+                    body.append(end_stmt)
                     curr_chunk = children[-1]
                     
                 elif isinstance(end_stmt, cst.If):
@@ -356,16 +369,15 @@ def cfg_to_ast(cfg: DirectedGraph, ast, remove_comments=True):
                     join_chunk = find_if_join_point(ordered_chunks, cfg, curr_chunk)
                     visited.add(join_chunk)
                     
-                    body_block = build_ast(children[0])
-                    orelse_block = build_ast(children[1]) if len(children) == 2 else None
-                    
-                    body.append(end_stmt.with_changes(body=body_block, orelse=cst.Else(orelse_block)))
+                    end_stmt = end_stmt.with_changes(body=build_ast(children[0]))
+                    if len(children) == 3: end_stmt = end_stmt.with_changes(orelse=cst.Else(build_ast(children[1])))
+                    body.append(end_stmt)
                     
                     visited.remove(join_chunk)
                     curr_chunk = join_chunk
                     
             else:
-                # iprint('build ast for uncond jump sequence')
+                # print('build ast for uncond jump sequence')
                 
                 # does not end in ctrl
                 assert len(children) == 1
@@ -387,7 +399,11 @@ def cfg_to_ast(cfg: DirectedGraph, ast, remove_comments=True):
     
     undent()   
     
-    new_function = function.with_changes(body=body_block)
+    # TODO make it cleaner todeal with Modles, such as here
+    if isinstance(function, cst.Module):
+        new_function = function.with_changes(body=body_block.body)
+    else:
+        new_function = function.with_changes(body=body_block)
     
     # with open("ast_original.txt","w+") as f:
     #     f.writelines(str(function))

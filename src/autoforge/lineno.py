@@ -1,7 +1,6 @@
 
 import libcst as cst
 from libcst.metadata import PositionProvider
-from autoforge import first_line
 def embed_line_numbers(ast):
     '''
     There is a metadata interface in libCST that allows us to get line/col positions

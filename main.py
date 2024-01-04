@@ -5,6 +5,8 @@ import libcst as cst
 import argparse
 
 import autoforge
+from autoforge.common_structures import isinstance_Functional
+from autoforge.printlib import bold, print
 
 def tree_to_graph(ast_tree: cst.Module):
     # Convert to graph
@@ -49,6 +51,8 @@ if __name__ == '__main__':
     # CFGS are listed in nesting order, with smaller functions first. Parent functions may define
     # variables that are used as captures in nested function, so we do rda on nested ones first, and
     # save captures captured to cfg.captures. Then the parent can read this
+    print()
+    
     for func_node, cfg in cfgs:
         autoforge.run_rda(cfg, ast_tree, cfgs)
     
@@ -65,6 +69,9 @@ if __name__ == '__main__':
     # before the smaller ones, hence the reversed iteration. This is because, if we swap the smaller
     # function before the parent one, it'll eventually get overwritten by the parent's (old) copy 
     # of the nested function
+    print('one')
+    print('two')
+    
     for func_node, cfg in reversed(cfgs):
         orig_func = cfg.func
         
@@ -72,13 +79,13 @@ if __name__ == '__main__':
         
         ast_tree = ast_tree.visit(autoforge.Sike(orig_func, new_func))
         
-        print('generated', orig_func.name.value, '\n', ast_tree.code_for_node(new_func))
+        if isinstance_Functional(orig_func):
+            # print("new func", new_func)
+            print('generated', orig_func.name.value) #, '\n', ast_tree.code_for_node(new_func))
+        else:
+            print('generated top level code')
         
-    print('Generated\n', ast_tree.code)
+    print('Generated\n', bold(ast_tree.code))
+    
     with open(args.output, "w") as file:
         file.write(ast_tree.code)
-    
-
-    
-    
-        

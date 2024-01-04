@@ -2,9 +2,9 @@
 import random
 from typing import Dict, List, Tuple
 import libcst as cst
-from autoforge import DirectedGraph, StmtData, first_line
-from autoforge import Chunk
-from autoforge.rda import stringify
+from autoforge import DirectedGraph, StmtData, Chunk
+from autoforge.printlib import indent, print, stringify, undent
+
 
 def random_index(list: List, prefer_not=None):
     if prefer_not is None:
@@ -70,11 +70,19 @@ def shuffle(cfg: DirectedGraph, ast: cst.Module):
     chunks.sort(key=lambda chunk: chunk.order)
     
     # Shuffle
-    print('\n\n====== Shuffling', first_line(cfg.func, ast))
+    print('\n\n====== Shuffling', cfg.func)
     
     # chunk.stmts -> insertable -> new_stmts
     for chunk in chunks:
         print('\nIn chunk', chunk.order)
+        
+        indent()
+        
+        # If last is control flow, then do not move it, add it back at the end
+        last = None
+        if chunk.end_in_control_flow():
+            last = chunk.stmts[-1]
+            del chunk.stmts[-1]
         
         new_stmts: List[Chunk] = []
         
@@ -87,19 +95,20 @@ def shuffle(cfg: DirectedGraph, ast: cst.Module):
                     chunk.stmts.remove(stmt)
                     
         # No-deps statements are always insertable
-        print('\tinitial stmts', stringify(chunk.stmts, ast))
-        print('\tinitial deps', [stringify(stmt.deps, ast) for stmt in chunk.stmts])
+        print('\tinitial stmts', chunk.stmts)
+        print('\tinitial deps', [stmt.deps for stmt in chunk.stmts])
         insert_stmts_with_no_deps()
         
         while len(insertable) > 0:            
             # Insert random allowable
+            print('\tinsert choices', insertable)
+            
             # i_to_remove = random_index(insertable, prefer_not=insertable[-1])
             i_to_remove = random_index(insertable)
             new_stmts.append(insertable[i_to_remove])
             del insertable[i_to_remove]
             
-            print('\tinsert choices', stringify(insertable, ast))
-            print('inserted', first_line(new_stmts[-1], ast))
+            print('inserted', new_stmts[-1])
             
             # Recompute deps (for all chunks after)
             for recmp_chunk in chunks:
@@ -114,10 +123,26 @@ def shuffle(cfg: DirectedGraph, ast: cst.Module):
             insert_stmts_with_no_deps()
             print()
 
-        assert len(chunk.stmts) == 0, 'remaning stmts: ' + str(stringify(chunk.stmts, ast))
+        assert len(chunk.stmts) == 0, 'remaning stmts: ' + str(stringify(chunk.stmts))
         
+        # Add back control flow, if applicable
+        if last is not None:
+            new_stmts.append(last)
+            
+            # Recompute deps (for all chunks after)
+            # TODO do not repeat this chunk
+            for recmp_chunk in chunks:
+                if recmp_chunk.order < chunk.order: continue
+                
+                for stmt in recmp_chunk.stmts:
+                    # Remove dependency if it was just inserted
+                    if new_stmts[-1].node in stmt.deps:
+                        stmt.deps.remove(new_stmts[-1].node)
+            
         # Swap chunk stmts with new stmts
         chunk.stmts = new_stmts
+        
+        undent()
         
     
     # print('Regenerated:', ast_tree.code, sep='\n')
